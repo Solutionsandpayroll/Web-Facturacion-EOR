@@ -64,6 +64,8 @@ function App() {
   const [busqueda, setBusqueda] = useState('')
   const dropdownRef = useRef(null)
   const [periodo, setPeriodo] = useState('')
+  const [tasaCambio, setTasaCambio] = useState('')
+  const [tasaCambioEur, setTasaCambioEur] = useState('')
   const [generando, setGenerando] = useState(false)
   const [error, setError] = useState(null)
   const [exitoCount, setExitoCount] = useState(0)
@@ -114,18 +116,28 @@ function App() {
     if (!reporteNovasoft) return setError('Sube el archivo de reporte Novasoft.')
     if (clientesSeleccionados.length === 0) return setError('Selecciona al menos un cliente.')
     if (!periodo.trim()) return setError('Escribe el periodo de facturación.')
+    if (!tasaCambio.trim()) return setError('Escribe la tasa de cambio USD → COP.')
+    if (clientesSeleccionados.includes('C1055 - RIVERMATE') && !tasaCambioEur.trim())
+      return setError('Escribe la tasa de cambio EUR → COP para RIVERMATE.')
 
     setGenerando(true)
     try {
       // --- 1. Leer Base de empleados ---
       const baseBuffer = await baseEmpleados.arrayBuffer()
-      const baseWb = XLSX.read(baseBuffer, { type: 'array' })
+      const baseWb = XLSX.read(baseBuffer, { type: 'array', cellDates: true })
       const baseSheet = baseWb.Sheets[baseWb.SheetNames[0]]
       const baseData = XLSX.utils.sheet_to_json(baseSheet, { header: 1 })
 
       const headerBase = (baseData[0] || []).map(h => String(h ?? '').trim().toUpperCase())
-      const colEmp = headerBase.indexOf('CODIGO EMPLEADO')
-      const colCC  = headerBase.indexOf('CENTRO COSTOS')
+      const colEmp    = headerBase.indexOf('CODIGO EMPLEADO')
+      const colCC     = headerBase.indexOf('CENTRO COSTOS')
+      const colAlt    = headerBase.indexOf('CODIGO ALTERNO')
+      const colNombre = headerBase.indexOf('NOMBRE')
+      const colFIng   = headerBase.indexOf('F_INGRESO')
+      const colFRet   = headerBase.indexOf('F_RETIRO')
+      const colSubcli = headerBase.indexOf('SUBCLIENTE')
+      // "CLASIFICACIÓN NO 4" puede tener variaciones de tilde/espacios
+      const colClasif = headerBase.findIndex(h => h.replace(/[^A-Z0-9 ]/g, '').trim() === 'CLASIFICACION NO 4')
 
       console.log('=== BASE DE EMPLEADOS ===')
       console.log('Encabezados encontrados:', headerBase)
@@ -136,12 +148,36 @@ function App() {
       if (colEmp === -1) throw new Error('No se encontró la columna "CODIGO EMPLEADO" en la base de empleados.')
       if (colCC  === -1) throw new Error('No se encontró la columna "CENTRO COSTOS" en la base de empleados.')
 
-      // Mapa: códigoEmpleado → centroCostos
+      // Mapa: códigoEmpleado → { cc, alt, nombre, fIngreso, fRetiro, subcli, clasif }
       const mapaCC = new Map()
+      const mapaEmpleados = new Map()
       for (let i = 1; i < baseData.length; i++) {
-        const codigo = String(baseData[i][colEmp] ?? '').trim()
-        const cc     = String(baseData[i][colCC]  ?? '').trim()
-        if (codigo) mapaCC.set(codigo, cc)
+        const fila   = baseData[i]
+        const codigo = String(fila[colEmp] ?? '').trim()
+        if (!codigo) continue
+        const cc = String(fila[colCC] ?? '').trim()
+        mapaCC.set(codigo, cc)
+
+        // SUBCLIENTE: quitar prefijo "NN - " si no es "0 - NO APLICA"
+        let subcliRaw = String(fila[colSubcli] ?? '').trim()
+        let subcliVal = ''
+        if (subcliRaw && !/^0\s*-\s*NO APLICA/i.test(subcliRaw)) {
+          // Eliminar "XX - " del inicio (número + guión + espacio)
+          subcliVal = subcliRaw.replace(/^\d+\s*-\s*/, '')
+        }
+
+        // CLASIFICACIÓN NO 4: vacío si es "0 - NO APLICA"
+        let clasifRaw = colClasif !== -1 ? String(fila[colClasif] ?? '').trim() : ''
+        let clasifVal = /^0\s*-\s*NO APLICA/i.test(clasifRaw) ? '' : clasifRaw
+
+        mapaEmpleados.set(codigo, {
+          alt:      colAlt    !== -1 ? String(fila[colAlt]    ?? '').trim() : '',
+          nombre:   colNombre !== -1 ? String(fila[colNombre] ?? '').trim() : '',
+          fIngreso: colFIng   !== -1 ? fila[colFIng]  ?? null : null,
+          fRetiro:  colFRet   !== -1 ? fila[colFRet]  ?? null : null,
+          subcli:   subcliVal,
+          clasif:   clasifVal,
+        })
       }
 
       console.log('Primeras 10 entradas del mapa código→CC:',
@@ -213,9 +249,21 @@ function App() {
           ],
         },
         {
+          columnaDestino: '13th Salary Alt',
+          conceptos: [
+            '001500 Prima de Servicios',
+          ],
+        },
+        {
           columnaDestino: '14th Salary',
           conceptos: [
             '008412 Provision Cesantias',
+          ],
+        },
+        {
+          columnaDestino: '14th Salary Alt',
+          conceptos: [
+            '001560 Cesantias',
           ],
         },
         {
@@ -285,6 +333,7 @@ function App() {
           columnaDestino: 'Food allowance',
           conceptos: [
             '001401 Auxilio de Alimentacion',
+            '101310-Peoplepass Alimentacion',
           ],
         },
         {
@@ -315,6 +364,12 @@ function App() {
           columnaDestino: 'Interest on 14th Salary',
           conceptos: [
             '008415 Provision Int Ces',
+          ],
+        },
+        {
+          columnaDestino: 'Interest on 14th Salary Alt',
+          conceptos: [
+            '001565 Int Cesantias',
           ],
         },
         {
@@ -413,6 +468,7 @@ function App() {
             '101307 Auxilio Gym',
             '101317 Auxilio Medicina Prepag',
             '101318 Auxilio Poliza de Vida',
+            '100210 Peoplepass Bienestar',
           ],
         },
       ]
@@ -478,21 +534,27 @@ function App() {
       if (!tplResponse.ok) throw new Error('No se pudo cargar la plantilla "Formato facturacion - final.xlsx" desde public/.')
       const tplBuffer = await tplResponse.arrayBuffer()
 
-      // Extraer fórmulas de fila 5 con SheetJS ANTES de que JSZip elimine los clones
+      // Extraer fórmulas de filas 4 y 5 con SheetJS ANTES de que JSZip elimine los clones
       // SheetJS resuelve shared formulas correctamente, así recuperamos todas las fórmulas
       const wbTpl = XLSX.read(tplBuffer, { cellFormula: true })
       const wsTpl = wbTpl.Sheets[wbTpl.SheetNames[0]]
       const formulasRow5 = {} // colNumber (1-based) → formula string
+      const formulasRow4 = {} // colNumber (1-based) → formula string (fallback para colsTotal)
       Object.keys(wsTpl).forEach(cellAddr => {
         if (cellAddr.startsWith('!')) return
         const match = cellAddr.match(/^([A-Z]+)(\d+)$/)
-        if (!match || parseInt(match[2]) !== 5) return
+        if (!match) return
         const cell = wsTpl[cellAddr]
-        if (cell && cell.f) {
-          const colNum = XLSX.utils.decode_col(match[1]) + 1 // convierte a 1-based
-          formulasRow5[colNum] = cell.f
-        }
+        if (!cell || !cell.f) return
+        const colNum = XLSX.utils.decode_col(match[1]) + 1
+        const rowNum = parseInt(match[2])
+        if (rowNum === 5) formulasRow5[colNum] = cell.f
+        if (rowNum === 4) formulasRow4[colNum] = cell.f
       })
+
+      console.log('=== formulasRow4 (SheetJS) ===', JSON.stringify(
+        Object.fromEntries(Object.entries(formulasRow4).map(([k, v]) => [k + '(' + String.fromCharCode(64 + Number(k) % 26 || 26) + ')', v]))
+      ))
 
       // Pre-procesar: eliminar fórmulas compartidas que bloquean a ExcelJS
       const zip = await JSZip.loadAsync(tplBuffer)
@@ -505,13 +567,63 @@ function App() {
         xml = xml.replace(/<f t="shared"[^>]*\/>/g, '')
         zip.file(sheetName, xml)
       }
+
+      // Eliminar hojas extra (sheet2+) directamente del zip ANTES de que ExcelJS las cargue.
+      // removeWorksheet() de ExcelJS no borra el archivo interno, por eso sale el error
+      // "Registros quitados: Fórmula de /xl/worksheets/sheet2.xml".
+      const hojasOrdenadas = [...sheetNames].sort()
+      if (hojasOrdenadas.length > 1) {
+        const extrasZip = hojasOrdenadas.slice(1)
+        extrasZip.forEach(path => zip.remove(path))
+
+        // xl/workbook.xml → quitar entradas <sheet> con sheetId > 1
+        if (zip.files['xl/workbook.xml']) {
+          let wbXml = await zip.files['xl/workbook.xml'].async('string')
+          wbXml = wbXml.replace(/<sheet\b[^>]+\bsheetId="([^"]+)"[^>]*\/>/g,
+            (m, id) => parseInt(id) > 1 ? '' : m)
+          zip.file('xl/workbook.xml', wbXml)
+        }
+
+        // xl/_rels/workbook.xml.rels → quitar relaciones a las hojas eliminadas
+        const relsPath = 'xl/_rels/workbook.xml.rels'
+        if (zip.files[relsPath]) {
+          let relsXml = await zip.files[relsPath].async('string')
+          extrasZip.forEach(sheetPath => {
+            const relTarget = sheetPath.replace(/^xl\//, '')
+            const esc = relTarget.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            relsXml = relsXml.replace(new RegExp(`<Relationship[^>]*Target="${esc}"[^>]*\\/>`, 'g'), '')
+          })
+          zip.file(relsPath, relsXml)
+        }
+
+        // [Content_Types].xml → quitar Override para las hojas eliminadas
+        if (zip.files['[Content_Types].xml']) {
+          let ctXml = await zip.files['[Content_Types].xml'].async('string')
+          extrasZip.forEach(sheetPath => {
+            const partName = ('/' + sheetPath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            ctXml = ctXml.replace(new RegExp(`<Override[^>]*PartName="${partName}"[^>]*\\/>`, 'g'), '')
+          })
+          zip.file('[Content_Types].xml', ctXml)
+        }
+      }
+
       const cleanTplBuffer = await zip.generateAsync({ type: 'arraybuffer' })
+
+      // Verificar que el zip limpio no tiene sheet2
+      JSZip.loadAsync(cleanTplBuffer).then(z => {
+        console.log('=== Hojas en cleanTplBuffer (tras JSZip) ===',
+          Object.keys(z.files).filter(f => f.startsWith('xl/worksheets/') && f.endsWith('.xml')))
+      })
 
       const periodoLimpio = periodo.trim().replace(/[\/\\?%*:|"<>]/g, '-')
       let archivosGenerados = 0
 
       // --- 4. Generar un archivo por cada cliente seleccionado ---
       for (const cliente of clientesSeleccionados) {
+        // Clientes que usan conceptos de liquidación (no provisiones) para 13th/14th/Interest
+        const CLIENTES_LIQUIDACION = ['C1038 - ONCEHUB', 'C1029 - INSIDER']
+        const esLiquidacion = CLIENTES_LIQUIDACION.includes(cliente)
+
         // Filtrar códigos para este cliente
         const codigosFiltrados = codigosNova.filter(codigo => {
           const cc = mapaCC.get(codigo)
@@ -528,6 +640,12 @@ function App() {
         // Cargar plantilla fresca (ya limpia) para cada cliente
         const workbook = new ExcelJS.Workbook()
         await workbook.xlsx.load(cleanTplBuffer.slice(0))
+
+        // Eliminar hojas extra del modelo ExcelJS (doble seguro junto al JSZip)
+        console.log('=== Hojas en ExcelJS tras load ===', workbook.worksheets.map(ws => ws.name))
+        workbook.worksheets.slice(1).forEach(ws => workbook.removeWorksheet(ws.id))
+        console.log('=== Hojas en ExcelJS tras removeWorksheet ===', workbook.worksheets.map(ws => ws.name))
+
         const worksheet = workbook.worksheets[0]
 
         // Encontrar columna "EMPLOYEE CODE" y columnas destino de grupos en fila 3
@@ -537,42 +655,58 @@ function App() {
         const colsDestino = {}
         gruposConIndices.forEach(g => { colsDestino[g.columnaDestino] = -1 })
 
-        // Columnas TOTAL: col → { formula: string, style: object }
-        const colsTotal = {}
+        // Columnas de fórmula: detectadas por nombre de encabezado, escritas post-splice
+        let colPayments = -1
+        const totalesHeaders = []  // cols con encabezado exacto "TOTAL", en orden de aparición
+        let colTotalLegal = -1, colTotalCOP = -1, colTotalEmpCostUSD = -1
+        let colFeeUSD = -1, colVAT = -1, colTotalUSD = -1
         // Columnas con fórmula variable por cliente
         let colFee = -1, colBanking = -1, colIva = -1
+        // Columnas con datos de base de empleados o valores fijos
+        let colRfWid = -1, colName = -1, colOnboard = -1, colOffboard = -1
+        let colCustName = -1, colCustId = -1, colSvcType = -1, colPayMonth = -1, colCountry = -1
+        let colErSs = -1, colEeStatus = -1, colExpenses = -1, colTotalEmpCost = -1, colExchangeRate = -1
 
         headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           const val = String(cell.value ?? '').trim().toUpperCase()
-          if (val === 'EMPLOYEE CODE') colEC = colNumber
+          if (val === 'EMPLOYEE CODE')                  colEC        = colNumber
+          if (val === 'EE RF WID')                      colRfWid     = colNumber
+          if (val === 'NAME')                           colName      = colNumber
+          if (val === 'ONBOARDING DATE')                colOnboard   = colNumber
+          if (val === 'OFFBOARDING DATE')               colOffboard  = colNumber
+          if (val === 'CUSTOMER NAME')                  colCustName  = colNumber
+          if (val === 'CUSTOMER ID')                    colCustId    = colNumber
+          if (val === 'SERVICE TYPE / INVOICE TYPE')    colSvcType   = colNumber
+          if (val === 'PAYROLL MONTH')                  colPayMonth  = colNumber
+          if (val === 'COUNTRY')                        colCountry   = colNumber
+          if (val === 'ER SS RATE %')                   colErSs      = colNumber
+          if (val === 'EE STATUS (ONBOARDING/ACTIVE/OFFBOARDING)') colEeStatus = colNumber
+          if (val === 'EXPENSES') colExpenses = colNumber
+          if (val === 'TOTAL EMPLOYEE COST') colTotalEmpCost = colNumber
+          if (val === 'EXCHANGE RATE') colExchangeRate = colNumber
           gruposConIndices.forEach(g => {
             if (val === g.columnaDestino.toUpperCase()) colsDestino[g.columnaDestino] = colNumber
           })
-          // Columnas de fórmula por cliente (manejadas aparte, NO en colsTotal)
+          // Columnas de fórmula por cliente
           if (val === 'FEE')         { colFee     = colNumber; return }
           if (val === 'BANKING TAX') { colBanking  = colNumber; return }
           if (val === 'IVA')         { colIva      = colNumber; return }
-          // Resto de columnas con fórmula replicada genéricamente
-          if (['TOTAL', 'PAYMENTS', 'FEE USD', 'VAT'].some(kw => val.includes(kw))) {
-            colsTotal[colNumber] = null // se rellena abajo con la fórmula de fila 4
-          }
+          // Columnas de fórmula calculadas post-splice
+          if (val === 'PAYMENTS')                      colPayments        = colNumber
+          if (val === 'TOTAL')                         totalesHeaders.push(colNumber)
+          if (val === 'TOTAL COST AND LEGAL BENEFITS') colTotalLegal      = colNumber
+          if (val === 'TOTAL COP')                     colTotalCOP        = colNumber
+          if (val === 'TOTAL EMPLOYEE COST USD')       colTotalEmpCostUSD = colNumber
+          if (val === 'FEE USD')                       colFeeUSD          = colNumber
+          if (val === 'VAT')                           colVAT             = colNumber
+          if (val === 'TOTAL USD')                     colTotalUSD        = colNumber
         })
+
+        const [colTotalSS, colTotalProv, colTotalOther] = [...totalesHeaders, -1, -1, -1]
+        const cfg = CONFIG_CLIENTES[cliente] || {}
 
         console.log('colEC:', colEC, '| colsDestino:', colsDestino)
         if (colEC === -1) throw new Error('No se encontró la columna "EMPLOYEE CODE" en la fila 3 de la plantilla.')
-
-        // Capturar fórmulas y estilos de fila 4 para columnas TOTAL
-        Object.keys(colsTotal).forEach(colNum => {
-          const c = worksheet.getRow(4).getCell(Number(colNum))
-          const v = c.value
-          let formula = null
-          if (v && typeof v === 'object' && v.formula) formula = v.formula
-          else if (typeof v === 'string' && v.startsWith('=')) formula = v.slice(1)
-          colsTotal[colNum] = {
-            formula,
-            style: c.style ? JSON.parse(JSON.stringify(c.style)) : {},
-          }
-        })
 
         // Capturar estilos de referencia (fila 4) para cada columna que se va a escribir
         const estilosRef = {}
@@ -585,46 +719,28 @@ function App() {
             estilosRef[col] = c.style ? JSON.parse(JSON.stringify(c.style)) : {}
           }
         })
-        // Capturar estilos fila 4 para columnas de fórmula por cliente
-        ;[colFee, colBanking, colIva].forEach(col => {
+        // Capturar estilos fila 4 para todas las columnas que se escribirán
+        ;[colFee, colBanking, colIva,
+          colRfWid, colName, colOnboard, colOffboard,
+          colCustName, colCustId, colSvcType, colPayMonth, colCountry, colErSs, colEeStatus, colExchangeRate,
+          colPayments, ...totalesHeaders, colTotalLegal, colTotalEmpCost, colTotalCOP, colTotalEmpCostUSD, colFeeUSD, colVAT, colTotalUSD,
+        ].forEach(col => {
           if (col !== -1) {
             const c = worksheet.getRow(4).getCell(col)
             estilosRef[col] = c.style ? JSON.parse(JSON.stringify(c.style)) : {}
           }
         })
+        // Capturar estilos de fila 5 (totales) antes de limpiarla → se restauran post-splice
+        const estilosRow5 = {}
+        worksheet.getRow(5).eachCell({ includeEmpty: true }, (cell, colNum) => {
+          if (cell.style && Object.keys(cell.style).length > 0)
+            estilosRow5[colNum] = JSON.parse(JSON.stringify(cell.style))
+        })
 
-        // Guardar contenido completo de la fila 5 (fórmulas de totales) antes de limpiar
-        // Usamos SheetJS como fuente de verdad para las fórmulas (ExcelJS pierde los clones)
-        const filaFormulas = []
+        // Limpiar la fila 5 original (estilos ya capturados en estilosRow5)
+        // Los formularios se reconstruirán dinámicamente post-splice
         const row5 = worksheet.getRow(5)
-        row5.eachCell({ includeEmpty: true }, (cell, colNum) => {
-          // Obtener fórmula: primero ExcelJS, si no tiene usar SheetJS como fallback
-          let value = cell.value
-          const formulaSheetJS = formulasRow5[colNum]
-          if (formulaSheetJS) {
-            // Preferir siempre la fórmula de SheetJS (garantiza tenerla aunque ExcelJS la haya perdido)
-            value = { formula: formulaSheetJS }
-          }
-          filaFormulas[colNum] = {
-            value,
-            style: cell.style ? JSON.parse(JSON.stringify(cell.style)) : {},
-          }
-        })
-        // Añadir celdas de formulasRow5 que eachCell no visitó (celdas vacías no iteradas)
-        Object.entries(formulasRow5).forEach(([colNum, formula]) => {
-          const col = Number(colNum)
-          if (!filaFormulas[col]) {
-            const cell = row5.getCell(col)
-            filaFormulas[col] = {
-              value: { formula },
-              style: cell.style ? JSON.parse(JSON.stringify(cell.style)) : {},
-            }
-          }
-        })
-
-        // Limpiar la fila 5 original por completo (valores + estilos) en TODAS las columnas
-        // para que no queden restos cuando los empleados la sobreescriban parcialmente
-        const totalCols = worksheet.columnCount || filaFormulas.length
+        const totalCols = worksheet.columnCount || 300
         for (let colNum = 1; colNum <= totalCols; colNum++) {
           const c = row5.getCell(colNum)
           c.value = null
@@ -633,9 +749,32 @@ function App() {
         row5.commit()
 
         // Limpiar datos previos desde fila 4 en todas las columnas destino
-        const todasLasCols = [colEC, ...Object.values(colsDestino).filter(c => c !== -1)]
+        // También limpiar las columnas de fórmula del template (TOTAL, PAYMENTS, etc.)
+        // para que colsConDatos no las detecte como "con datos" debido a la fórmula original de fila 4.
+        const todasLasCols = [
+          colEC,
+          ...Object.values(colsDestino).filter(c => c !== -1),
+          colPayments, ...totalesHeaders, colTotalLegal, colTotalEmpCost,
+          colFee, colBanking, colIva,
+          colTotalCOP, colTotalEmpCostUSD, colFeeUSD, colVAT, colTotalUSD,
+          colErSs, colEeStatus,
+        ].filter((c, i, arr) => c !== -1 && arr.indexOf(c) === i)
         for (let r = 4; r <= worksheet.rowCount; r++) {
           todasLasCols.forEach(col => { worksheet.getRow(r).getCell(col).value = null })
+        }
+
+        const sinUSD = ['C1042 - EPDM', 'C1055 - RIVERMATE', 'C1058 - POC PHARMA'].includes(cliente)
+
+        // Helpers de conversión columna ↔ letra Excel
+        const numToLetter = (n) => {
+          let s = ''
+          while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26) }
+          return s
+        }
+        const colLetterToNum = (str) => {
+          let n = 0
+          for (let i = 0; i < str.length; i++) n = n * 26 + str.toUpperCase().charCodeAt(i) - 64
+          return n
         }
 
         // Escribir datos desde fila 4
@@ -648,99 +787,461 @@ function App() {
           cellEC.value = codigo
           if (estilosRef[colEC]) cellEC.style = JSON.parse(JSON.stringify(estilosRef[colEC]))
 
+          // Datos adicionales de la base de empleados
+          const empData = mapaEmpleados.get(codigo) || {}
+          const escribirCelda = (col, valor) => {
+            if (col === -1) return
+            const c = row.getCell(col)
+            c.value = valor || null
+            if (estilosRef[col]) c.style = JSON.parse(JSON.stringify(estilosRef[col]))
+          }
+          escribirCelda(colRfWid,    empData.alt    || null)
+          escribirCelda(colName,     empData.nombre || null)
+          escribirCelda(colOnboard,  empData.fIngreso)
+          escribirCelda(colOffboard, empData.fRetiro)
+          escribirCelda(colCustName, empData.subcli || null)
+          escribirCelda(colCustId,   empData.clasif || null)
+          // Valores fijos por fila
+          const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+          const mesActual = MESES_ES[new Date().getMonth()]
+          escribirCelda(colSvcType,  'Monthly Payroll')
+          escribirCelda(colPayMonth, mesActual)
+          escribirCelda(colCountry,  'Colombia')
+          if (!sinUSD && colExchangeRate !== -1) {
+            const esRivermate = cliente === 'C1055 - RIVERMATE'
+            const tasaStr = esRivermate ? tasaCambioEur : tasaCambio
+            const tasaNum = parseFloat(tasaStr.replace(/,/g, '.'))
+            escribirCelda(colExchangeRate, isNaN(tasaNum) ? null : tasaNum)
+          }
+
+          // EE Status: onboarding / active / offboarding
+          if (colEeStatus !== -1) {
+            const ahora = new Date()
+            const mesHoy  = ahora.getMonth()
+            const anioHoy = ahora.getFullYear()
+            const toDate = (v) => {
+              if (!v) return null
+              if (v instanceof Date) return v
+              const d = new Date(v)
+              return isNaN(d) ? null : d
+            }
+            const fIng = toDate(empData.fIngreso)
+            const fRet = toDate(empData.fRetiro)
+            let status = 'active'
+            if (fRet && (fRet.getFullYear() < anioHoy || (fRet.getFullYear() === anioHoy && fRet.getMonth() <= mesHoy))) {
+              status = 'offboarding'
+            } else if (fIng && fIng.getMonth() === mesHoy && fIng.getFullYear() === anioHoy) {
+              status = 'onboarding'
+            }
+            escribirCelda(colEeStatus, status)
+          }
+
           // Valores de cada grupo
           gruposConIndices.forEach(g => {
             const col = colsDestino[g.columnaDestino]
             if (col === -1) return
             const cell = row.getCell(col)
-            const suma = valores[g.columnaDestino] ?? 0
+            // Para ONCEHUB/INSIDER usar conceptos de liquidación; otros usan provisiones
+            let sumaKey = g.columnaDestino
+            if (esLiquidacion && g.columnaDestino === '13th Salary') sumaKey = '13th Salary Alt'
+            if (esLiquidacion && g.columnaDestino === '14th Salary') sumaKey = '14th Salary Alt'
+            if (esLiquidacion && g.columnaDestino === 'Interest on 14th Salary') sumaKey = 'Interest on 14th Salary Alt'
+            const suma = valores[sumaKey] ?? 0
             cell.value = suma !== 0 ? parseFloat(suma.toFixed(2)) : null
             if (estilosRef[col]) cell.style = JSON.parse(JSON.stringify(estilosRef[col]))
           })
 
-          // Replicar fórmulas de columnas TOTAL ajustando referencias de fila
-          const filaActual = 4 + i
-          Object.entries(colsTotal).forEach(([colNum, data]) => {
-            if (!data || !data.formula) return
-            // Reemplaza referencias a fila 4 por la fila actual (ej. B4 → B7)
-            const formulaAdaptada = data.formula.replace(
-              /([A-Za-z]+)(\d+)/g,
-              (match, col, row) => parseInt(row) === 4 ? `${col}${filaActual}` : match
-            )
-            const cell = row.getCell(Number(colNum))
-            cell.value = { formula: formulaAdaptada }
-            if (data.style) cell.style = JSON.parse(JSON.stringify(data.style))
-          })
-
-          // Fórmulas específicas por cliente: FEE, BANKING TAX, IVA
-          const cfg = CONFIG_CLIENTES[cliente] || {}
-          if (colFee !== -1) {
-            const cell = row.getCell(colFee)
-            if (cfg.fee) {
-              cell.value = { formula: `${cfg.fee}*$BG${filaActual}` }
-              if (estilosRef[colFee]) cell.style = JSON.parse(JSON.stringify(estilosRef[colFee]))
-            } else {
-              cell.value = null
-            }
-          }
-          if (colBanking !== -1) {
-            const cell = row.getCell(colBanking)
-            if (cfg.banking) {
-              cell.value = { formula: `SUM($AF${filaActual},$AN${filaActual},$AS${filaActual},$AZ${filaActual})*0.004` }
-              if (estilosRef[colBanking]) cell.style = JSON.parse(JSON.stringify(estilosRef[colBanking]))
-            } else {
-              cell.value = null
-            }
-          }
-          if (colIva !== -1) {
-            const cell = row.getCell(colIva)
-            if (cfg.iva) {
-              cell.value = { formula: `$BC${filaActual}*0.19` }
-              if (estilosRef[colIva]) cell.style = JSON.parse(JSON.stringify(estilosRef[colIva]))
-            } else {
-              cell.value = null
-            }
-          }
-
           row.commit()
         })
 
-        // Restaurar la fila de fórmulas al final de los datos, actualizando rangos dinámicamente
         const filaTotal = 4 + codigosFiltrados.length
         const ultimaFilaDatos = filaTotal - 1  // última fila con empleados
 
-        // Reescribe rangos tipo "B4:B4" o "B4:B5" para que cubran todos los datos
-        const actualizarRango = (formula) => {
-          return String(formula).replace(
-            /([A-Za-z]+)(\d+):([A-Za-z]+)(\d+)/g,
-            (match, col1, row1, col2, row2) => {
-              if (parseInt(row1) === 4) {
-                return `${col1}${row1}:${col2}${ultimaFilaDatos}`
-              }
-              return match
-            }
-          )
+        // ── Eliminar columnas vacías ────────────────────────────────────────────
+        // (Las hojas extra ya se eliminaron del zip en el pre-procesado de la plantilla)
+
+        // Verificar si hay datos de provisiones (13th/14th/Interest).
+        // Si no los hay, el 2° TOTAL y las columnas de provisiones se eliminarán automáticamente.
+        const tieneProvisiones = codigosFiltrados.some(codigo => {
+          const vals = mapaValores.get(codigo) || {}
+          if (esLiquidacion) {
+            return (vals['13th Salary Alt']||0) !== 0 || (vals['14th Salary Alt']||0) !== 0 || (vals['Interest on 14th Salary Alt']||0) !== 0
+          }
+          return (vals['13th Salary']||0) !== 0 || (vals['14th Salary']||0) !== 0 || (vals['Interest on 14th Salary']||0) !== 0
+        })
+
+        // 1. Columnas de fórmula que deben sobrevivir aunque estén vacías en datos.
+        //    El 2° TOTAL (provisiones = totalesHeaders[1]) solo se protege si hay datos de provisiones.
+        const protectedCols = new Set([
+          colPayments,
+          totalesHeaders[0],
+          tieneProvisiones ? (totalesHeaders[1] ?? -1) : -1,
+          totalesHeaders[2],
+          tieneProvisiones ? colTotalLegal : -1,
+          colTotalEmpCost,
+          colFee,
+          cfg.banking ? colBanking : -1,
+          cfg.iva     ? colIva     : -1,
+          colTotalCOP,
+          sinUSD ? -1 : colTotalEmpCostUSD,
+          sinUSD ? -1 : colFeeUSD,
+          cfg.iva && !sinUSD ? colVAT : -1,
+          sinUSD ? -1 : colTotalUSD,
+          sinUSD ? -1 : colExchangeRate,
+        ].filter(c => c !== -1))
+
+        // 2. Detectar columnas con datos en filas 4…filaTotal-1
+        const colsConDatos = new Set()
+        const maxCols = worksheet.columnCount || 300
+        worksheet.eachRow((row, rowNum) => {
+          if (rowNum < 4 || rowNum >= filaTotal) return
+          row.eachCell({ includeEmpty: false }, (cell, colNum) => {
+            const v = cell.value
+            if (v !== null && v !== undefined && v !== '') colsConDatos.add(colNum)
+          })
+        })
+        const emptyColSet = new Set()
+        for (let col = 1; col <= maxCols; col++) {
+          if (!colsConDatos.has(col) && !protectedCols.has(col)) emptyColSet.add(col)
         }
 
-        const rowFormulas = worksheet.getRow(filaTotal)
-        filaFormulas.forEach((data, colNum) => {
-          if (!data) return
-          const cell = rowFormulas.getCell(colNum)
-          let valor = data.value
-          // Si la celda tiene fórmula, actualizar el rango para abarcar todos los empleados
-          if (valor && typeof valor === 'object' && valor.formula) {
-            valor = { formula: actualizarRango(valor.formula) }
-          } else if (typeof valor === 'string' && valor.startsWith('=')) {
-            valor = { formula: actualizarRango(valor.slice(1)) }
+        // 3. Mapa de columna original → nueva posición tras las eliminaciones
+        const colShiftMap = {}
+        let nEliminadas = 0
+        for (let col = 1; col <= maxCols; col++) {
+          if (emptyColSet.has(col)) { nEliminadas++; continue }
+          colShiftMap[col] = col - nEliminadas
+        }
+        // Mapa inverso: nueva posición → columna original (para recuperar estilos)
+        const colOrigFromNew = {}
+        Object.entries(colShiftMap).forEach(([orig, newC]) => { colOrigFromNew[newC] = parseInt(orig) })
+
+        // 4. Guardar y desunir merges antes del splice
+        const savedMerges = []
+        const mergeModel = (worksheet.model && worksheet.model.merges) || []
+        // Primero, recopilar info de todos los merges y desunirlos
+        mergeModel.forEach(rangeStr => {
+          const [tlStr, brStr] = String(rangeStr).split(':')
+          const parseAddr = addr => {
+            const m = String(addr || '').match(/^([A-Z]+)(\d+)$/)
+            return m ? { col: colLetterToNum(m[1]), row: parseInt(m[2]) } : null
           }
-          cell.value = valor
-          if (data.style) cell.style = JSON.parse(JSON.stringify(data.style))
+          const tl = parseAddr(tlStr), br = parseAddr(brStr || tlStr)
+          if (tl && br) {
+            // Leer valor y estilo de la top-left ANTES de desunir (mientras aún es master)
+            const tlCell = worksheet.getRow(tl.row).getCell(tl.col)
+            const tlValue = tlCell.value ?? null
+            const tlStyle = tlCell.style ? JSON.parse(JSON.stringify(tlCell.style)) : {}
+            savedMerges.push({ tl, br, tlValue, tlStyle })
+            try { worksheet.unMergeCells(rangeStr) } catch (e) {}
+          }
         })
-        rowFormulas.commit()
+        // Después de desunir todo: si la top-left va a ser eliminada, propagar
+        // valor y estilo a la primera celda superviviente del rango (ya no son esclavas)
+        savedMerges.forEach(({ tl, br, tlValue, tlStyle }) => {
+          if (!emptyColSet.has(tl.col)) return  // top-left sobrevive, no hace falta propagar
+          if (tlValue === null && Object.keys(tlStyle).length === 0) return  // nada que propagar
+          for (let c = tl.col + 1; c <= br.col; c++) {
+            if (!emptyColSet.has(c)) {
+              const cell = worksheet.getRow(tl.row).getCell(c)
+              if (tlValue !== null) cell.value = tlValue
+              cell.style = JSON.parse(JSON.stringify(tlStyle))
+              break
+            }
+          }
+        })
+
+        // 5. Eliminar columnas de derecha a izquierda
+        const colsAEliminar = [...emptyColSet].sort((a, b) => b - a)
+        for (const col of colsAEliminar) {
+          worksheet.spliceColumns(col, 1)
+        }
+
+        // 6. Insertar columnas separadoras en blanco (ANTES de restaurar merges)
+        // Calcular posiciones post-eliminación de los encabezados separadores via colShiftMap
+        const sepColsPostDelete = [colPayments, totalesHeaders[0], colTotalLegal, totalesHeaders[2]]
+          .filter(c => c !== -1 && colShiftMap[c] !== undefined)
+          .map(c => colShiftMap[c])
+          .filter((c, i, arr) => arr.indexOf(c) === i)
+          .sort((a, b) => a - b) // ascendente para calcular el shift correctamente
+
+        // Cuántos separadores se insertan ANTES de una columna post-eliminación dada
+        const sepShiftFor = (col) => sepColsPostDelete.filter(s => s < col).length
+
+        // Insertar de derecha a izquierda para no alterar índices
+        for (const s of [...sepColsPostDelete].sort((a, b) => b - a)) {
+          worksheet.spliceColumns(s + 1, 0, [])
+        }
+
+        // 7. Restaurar merges aplicando colShiftMap + sepShiftFor en un solo paso
+        savedMerges.forEach(({ tl, br }) => {
+          let newStart = null, newEnd = null
+          for (let col = tl.col; col <= br.col; col++) {
+            if (!emptyColSet.has(col) && colShiftMap[col] !== undefined) {
+              const finalCol = colShiftMap[col] + sepShiftFor(colShiftMap[col])
+              if (newStart === null) newStart = finalCol
+              newEnd = finalCol
+            }
+          }
+          if (newStart === null || newEnd === null) return
+          if (newStart === newEnd && tl.row === br.row) return
+          try {
+            worksheet.mergeCells(`${numToLetter(newStart)}${tl.row}:${numToLetter(newEnd)}${br.row}`)
+          } catch (e) {}
+        })
+
+        // Reconstruir colOrigFromNew considerando también el shift de los separadores
+        // colOrigFromNew[finalCol] = originalCol, donde finalCol = colShiftMap[orig] + sepShiftFor(colShiftMap[orig])
+        Object.entries(colShiftMap).forEach(([orig, postDeleteCol]) => {
+          const finalCol = postDeleteCol + sepShiftFor(postDeleteCol)
+          colOrigFromNew[finalCol] = parseInt(orig)
+        })
+
+        // 8. El límite a columna CA se aplica después de escribir las fórmulas (ver más abajo)
+
+        // ── Fórmulas post-splice ──────────────────────────────────────────────────────────────────────
+        // Re-escanear fila 3 para obtener las posiciones REALES de columnas tras el splice
+        const totalesPost = []
+        let pcPayments = -1, pcTotalLegal = -1, pcTotalEmpCost = -1
+        let pcFee = -1, pcBanking = -1, pcIva = -1
+        let pcTotalCOP = -1, pcTotalEmpCostUSD = -1, pcFeeUSD = -1, pcVAT = -1, pcTotalUSD = -1
+        let pcExchangeRate = -1, pcErSs = -1
+        const pcDestino = {}  // grupo.columnaDestino → col post-splice
+        const postCols  = {}  // header (uppercase) → col post-splice
+
+        worksheet.getRow(3).eachCell({ includeEmpty: true }, (cell, n) => {
+          const v = String(cell.value ?? '').trim().toUpperCase()
+          postCols[v] = n
+          if (v === 'PAYMENTS')                      pcPayments        = n
+          if (v === 'TOTAL')                         totalesPost.push(n)
+          if (v === 'TOTAL COST AND LEGAL BENEFITS') pcTotalLegal      = n
+          if (v === 'TOTAL EMPLOYEE COST')           pcTotalEmpCost    = n
+          if (v === 'FEE')                           pcFee             = n
+          if (v === 'BANKING TAX')                   pcBanking         = n
+          if (v === 'IVA')                           pcIva             = n
+          if (v === 'TOTAL COP')                     pcTotalCOP        = n
+          if (v === 'TOTAL EMPLOYEE COST USD')       pcTotalEmpCostUSD = n
+          if (v === 'FEE USD')                       pcFeeUSD          = n
+          if (v === 'VAT')                           pcVAT             = n
+          if (v === 'TOTAL USD')                     pcTotalUSD        = n
+          if (v === 'EXCHANGE RATE')                 pcExchangeRate    = n
+          if (v === 'ER SS RATE %')                  pcErSs            = n
+          gruposConIndices.forEach(g => {
+            if (v === g.columnaDestino.toUpperCase()) pcDestino[g.columnaDestino] = n
+          })
+        })
+        // Asignar los TOTAL post-splice según si existen provisiones:
+        // Con provisiones:    totalesPost = [1°TOTAL, 2°TOTAL, 3°TOTAL]
+        // Sin provisiones:    totalesPost = [1°TOTAL, 3°TOTAL]  (2°TOTAL eliminado)
+        const pcTotalSS   = totalesPost[0] ?? -1
+        const pcTotalProv = tieneProvisiones ? (totalesPost[1] ?? -1) : -1
+        const pcTotalOther = tieneProvisiones ? (totalesPost[2] ?? -1) : (totalesPost[1] ?? -1)
+
+        // Helper: estilo fila 4 (pre-splice) para columna post-splice
+        const sty  = (pc) => { const s = estilosRef[colOrigFromNew[pc]];  return s ? JSON.parse(JSON.stringify(s)) : {} }
+        const sty5 = (pc) => { const orig = colOrigFromNew[pc]; const s = (orig ? (estilosRow5[orig] || estilosRef[orig]) : null); return s ? JSON.parse(JSON.stringify(s)) : {} }
+        // Helper: SUM de lista de columnas para una fila
+        const L = (c) => numToLetter(c)
+        const sumCols = (cols, rowNum) => {
+          const valid = cols.filter(c => c && c !== -1)
+          if (valid.length === 0) return null
+          return `SUM(${valid.map(c => `${L(c)}${rowNum}`).join(',')})`
+        }
+
+        // Grupos de columnas post-splice para cada fórmula
+        const PAYMENT_GRUPOS = [
+          'SALARY', '"Sick" Leave', 'Alloawance 1 (Car Allowance)', 'Unused Holidays',
+          'Overtime', 'Bonus/Commission', 'Deduction or Gross Amount adjustments prevous month',
+          'Alloawance 2 (Mobile & Internet Allowance)', 'Food allowance',
+          'Home/Remote work allowance', 'Alloawance 4 (Other allowances)',
+          'Sign-on Bonus', 'Transport allowance', 'Wellness Allowance',
+          'On Call/ Plus Disponibilidad', 'Severance Pay (Taxable)',
+          'Rectroactive payment/Plus Compensation', 'Paternity/ Maternity leave',
+        ]
+        const TOTAL_SS_GRUPOS    = ['Family Fund Cost', 'Health Cost', 'ICBF cost', 'Labor Risk Cost', 'SENA Cost', 'Pension Cost']
+        const TOTAL_PROV_GRUPOS  = ['13th Salary', '14th Salary', 'Interest on 14th Salary']
+        const TOTAL_OTHER_GRUPOS = ['Expenses', 'Health Insurance', 'Medical Test']
+        const TOTAL_OTHER_EXTRA  = ['LEAVE PAID REFOUND', 'PARKING COST', 'LIEU OF NOTICE']
+
+        const paymentCols = PAYMENT_GRUPOS.map(g => pcDestino[g]).filter(c => c && c !== -1)
+        const ssCols      = TOTAL_SS_GRUPOS.map(g => pcDestino[g]).filter(c => c && c !== -1)
+        const provCols    = TOTAL_PROV_GRUPOS.map(g => pcDestino[g]).filter(c => c && c !== -1)
+        const otherCols   = [
+          ...TOTAL_OTHER_GRUPOS.map(g => pcDestino[g]),
+          ...TOTAL_OTHER_EXTRA.map(h => postCols[h]),
+        ].filter(c => c && c !== -1)
+
+        // ER SS Rate %: en el template original era la col AL (=38 en base 1)
+        const pcErSsRef = colShiftMap[38]
+
+        // Escribe las fórmulas de una fila concreta (datos + cálculos)
+        const writeRowFormulas = (rowNum) => {
+          const row = worksheet.getRow(rowNum)
+
+          if (pcPayments !== -1) {
+            const f = sumCols(paymentCols, rowNum)
+            if (f) { row.getCell(pcPayments).value = { formula: f }; row.getCell(pcPayments).style = sty(pcPayments) }
+          }
+          if (pcTotalSS !== -1) {
+            const f = sumCols(ssCols, rowNum)
+            if (f) { row.getCell(pcTotalSS).value = { formula: f }; row.getCell(pcTotalSS).style = sty(pcTotalSS) }
+          }
+          if (pcTotalProv !== -1) {
+            const f = sumCols(provCols, rowNum)
+            if (f) { row.getCell(pcTotalProv).value = { formula: f }; row.getCell(pcTotalProv).style = sty(pcTotalProv) }
+          }
+          if (pcTotalLegal !== -1) {
+            const f = sumCols([pcTotalSS, pcTotalProv].filter(c => c !== -1), rowNum)
+            if (f) { row.getCell(pcTotalLegal).value = { formula: f }; row.getCell(pcTotalLegal).style = sty(pcTotalLegal) }
+          }
+          if (pcTotalOther !== -1) {
+            const f = sumCols(otherCols, rowNum)
+            if (f) { row.getCell(pcTotalOther).value = { formula: f }; row.getCell(pcTotalOther).style = sty(pcTotalOther) }
+          }
+          // BANKING TAX
+          if (pcBanking !== -1 && cfg.banking) {
+            const base = [pcPayments, pcTotalSS, pcTotalProv, pcTotalOther].filter(c => c !== -1)
+            if (base.length > 0) {
+              row.getCell(pcBanking).value = { formula: `(${base.map(c => `${L(c)}${rowNum}`).join('+')})*0.004` }
+              row.getCell(pcBanking).style = sty(pcBanking)
+            }
+          }
+          // TOTAL EMPLOYEE COST
+          if (pcTotalEmpCost !== -1) {
+            const parts = [pcPayments, pcTotalSS, pcTotalProv, pcTotalOther,
+              cfg.banking && pcBanking !== -1 ? pcBanking : -1].filter(c => c !== -1)
+            const f = sumCols(parts, rowNum)
+            if (f) { row.getCell(pcTotalEmpCost).value = { formula: f }; row.getCell(pcTotalEmpCost).style = sty(pcTotalEmpCost) }
+          }
+          // FEE
+          if (pcFee !== -1 && cfg.fee) {
+            let feeFormula
+            const esPorcentaje = cfg.fee.endsWith('%')
+            if (esPorcentaje && pcTotalEmpCost !== -1) {
+              feeFormula = cfg.banking && pcBanking !== -1
+                ? `${cfg.fee}*(${L(pcTotalEmpCost)}${rowNum}+${L(pcBanking)}${rowNum})`
+                : `${cfg.fee}*${L(pcTotalEmpCost)}${rowNum}`
+            } else if (cliente === 'C1055 - RIVERMATE') {
+              const tasaEurNum = parseFloat(tasaCambioEur.replace(/,/g, '.'))
+              feeFormula = `${cfg.fee}*${isNaN(tasaEurNum) ? 1 : tasaEurNum}`
+            } else if (cliente === 'C1058 - POC PHARMA') {
+              const tasaUsdNum = parseFloat(tasaCambio.replace(/,/g, '.'))
+              feeFormula = `${cfg.fee}*${isNaN(tasaUsdNum) ? 1 : tasaUsdNum}`
+            } else if (pcExchangeRate !== -1) {
+              feeFormula = `${cfg.fee}*${L(pcExchangeRate)}${rowNum}`
+            }
+            if (feeFormula) { row.getCell(pcFee).value = { formula: feeFormula }; row.getCell(pcFee).style = sty(pcFee) }
+          }
+          // IVA
+          if (pcIva !== -1 && cfg.iva && pcFee !== -1) {
+            row.getCell(pcIva).value = { formula: `${L(pcFee)}${rowNum}*0.19` }
+            row.getCell(pcIva).style = sty(pcIva)
+          }
+          // TOTAL COP
+          if (pcTotalCOP !== -1) {
+            const parts = [pcTotalEmpCost, pcFee, cfg.iva && pcIva !== -1 ? pcIva : -1].filter(c => c !== -1)
+            const f = sumCols(parts, rowNum)
+            if (f) { row.getCell(pcTotalCOP).value = { formula: f }; row.getCell(pcTotalCOP).style = sty(pcTotalCOP) }
+          }
+          // TOTAL EMPLOYEE COST USD
+          if (!sinUSD && pcTotalEmpCostUSD !== -1 && pcTotalEmpCost !== -1 && pcExchangeRate !== -1) {
+            row.getCell(pcTotalEmpCostUSD).value = { formula: `ROUND(${L(pcTotalEmpCost)}${rowNum}/${L(pcExchangeRate)}${rowNum},2)` }
+            row.getCell(pcTotalEmpCostUSD).style = sty(pcTotalEmpCostUSD)
+          }
+          // FEE USD
+          if (!sinUSD && pcFeeUSD !== -1 && pcFee !== -1 && pcExchangeRate !== -1) {
+            row.getCell(pcFeeUSD).value = { formula: `ROUND(${L(pcFee)}${rowNum}/${L(pcExchangeRate)}${rowNum},2)` }
+            row.getCell(pcFeeUSD).style = sty(pcFeeUSD)
+          }
+          // VAT
+          if (!sinUSD && pcVAT !== -1 && cfg.iva && pcIva !== -1 && pcExchangeRate !== -1) {
+            row.getCell(pcVAT).value = { formula: `ROUND(${L(pcIva)}${rowNum}/${L(pcExchangeRate)}${rowNum},2)` }
+            row.getCell(pcVAT).style = sty(pcVAT)
+          }
+          // TOTAL USD
+          if (!sinUSD && pcTotalUSD !== -1) {
+            const parts = [pcTotalEmpCostUSD, pcFeeUSD, cfg.iva && pcVAT !== -1 ? pcVAT : -1].filter(c => c !== -1)
+            const f = sumCols(parts, rowNum)
+            if (f) { row.getCell(pcTotalUSD).value = { formula: f }; row.getCell(pcTotalUSD).style = sty(pcTotalUSD) }
+          }
+          // ER SS Rate % — solo REMOFIRST
+          if (pcErSs !== -1 && cliente === 'C1037 - REMOFIRST' && pcErSsRef) {
+            row.getCell(pcErSs).value = { formula: `IF(${L(pcErSsRef)}${rowNum}>0,31.94,14.44)` }
+            row.getCell(pcErSs).style = sty(pcErSs)
+          }
+
+          row.commit()
+        }
+
+        // Escribir fórmulas en cada fila de empleado
+        for (let i = 0; i < codigosFiltrados.length; i++) writeRowFormulas(4 + i)
+
+        // Fila de totales: SUM de cada columna numérica
+        const rowTotals = worksheet.getRow(filaTotal)
+        const todasNumCols = new Set([
+          ...Object.values(pcDestino).filter(c => c && c !== -1),
+          pcPayments, pcTotalSS, pcTotalProv, pcTotalLegal, pcTotalOther, pcTotalEmpCost,
+          cfg.fee     && pcFee     !== -1 ? pcFee     : -1,
+          cfg.banking && pcBanking !== -1 ? pcBanking : -1,
+          cfg.iva     && pcIva     !== -1 ? pcIva     : -1,
+          pcTotalCOP, pcTotalEmpCostUSD, pcFeeUSD,
+          cfg.iva     && pcVAT     !== -1 ? pcVAT     : -1,
+          pcTotalUSD,
+        ].filter(c => c && c !== -1))
+        todasNumCols.forEach(col => {
+          const cell = rowTotals.getCell(col)
+          cell.value = { formula: `SUM(${L(col)}4:${L(col)}${ultimaFilaDatos})` }
+          cell.style = sty5(col)
+        })
+        rowTotals.commit()
+
+        // Limitar a columna CA (79): eliminar todo lo que quede más allá.
+        // Se usa un número fijo grande porque worksheet.columnCount puede devolver
+        // el extent original del template (XEA, XDX...) aunque esté vacío.
+        worksheet.spliceColumns(80, 20000)
 
         // Descargar: nombre = "Facturación EOR - {Cliente} - {Periodo}.xlsx"
         const clienteLimpio = cliente.replace(/[\/\\?%*:|"<>]/g, '-')
-        const outBuffer = await workbook.xlsx.writeBuffer()
+        let outBuffer = await workbook.xlsx.writeBuffer()
+
+        // Post-proceso: ExcelJS regenera sheet2 al hacer spliceColumns incluso si
+        // la plantilla ya no lo tenía. Eliminarlo del buffer de salida.
+        {
+          const outZip = await JSZip.loadAsync(outBuffer)
+          const outSheets = Object.keys(outZip.files)
+            .filter(f => f.startsWith('xl/worksheets/') && f.endsWith('.xml'))
+            .sort()
+          if (outSheets.length > 1) {
+            const extras = outSheets.slice(1)
+            extras.forEach(p => outZip.remove(p))
+            if (outZip.files['xl/workbook.xml']) {
+              let wx = await outZip.files['xl/workbook.xml'].async('string')
+              wx = wx.replace(/<sheet\b[^>]+\bsheetId="([^"]+)"[^>]*\/>/g,
+                (m, id) => parseInt(id) > 1 ? '' : m)
+              outZip.file('xl/workbook.xml', wx)
+            }
+            const rp = 'xl/_rels/workbook.xml.rels'
+            if (outZip.files[rp]) {
+              let rx = await outZip.files[rp].async('string')
+              extras.forEach(sp => {
+                const rt = sp.replace(/^xl\//, '')
+                const esc = rt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                rx = rx.replace(new RegExp(`<Relationship[^>]*Target="${esc}"[^>]*\\/>`, 'g'), '')
+              })
+              outZip.file(rp, rx)
+            }
+            if (outZip.files['[Content_Types].xml']) {
+              let cx = await outZip.files['[Content_Types].xml'].async('string')
+              extras.forEach(sp => {
+                const pn = ('/' + sp).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                cx = cx.replace(new RegExp(`<Override[^>]*PartName="${pn}"[^>]*\\/>`, 'g'), '')
+              })
+              outZip.file('[Content_Types].xml', cx)
+            }
+            outBuffer = await outZip.generateAsync({ type: 'arraybuffer' })
+          }
+        }
+
         const blob = new Blob([outBuffer], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         })
@@ -1122,6 +1623,46 @@ function App() {
                     </div>
                   )}
                 </div>
+
+                {/* Tasa de cambio USD→COP — visible sólo cuando hay clientes seleccionados */}
+                {clientesSeleccionados.length > 0 && (
+                  <div className="form-group">
+                    <label className="label">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="1" x2="12" y2="23"/>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                      </svg>
+                      Tasa de cambio (USD → COP)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Ej: 4200"
+                      className="select-input"
+                      value={tasaCambio}
+                      onChange={e => { setTasaCambio(e.target.value); setError(null) }}
+                    />
+                  </div>
+                )}
+
+                {/* Tasa de cambio EUR→COP — solo si RIVERMATE está seleccionado */}
+                {clientesSeleccionados.includes('C1055 - RIVERMATE') && (
+                  <div className="form-group">
+                    <label className="label">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="1" x2="12" y2="23"/>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                      </svg>
+                      Tasa de cambio RIVERMATE (EUR → COP)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Ej: 4850"
+                      className="select-input"
+                      value={tasaCambioEur}
+                      onChange={e => { setTasaCambioEur(e.target.value); setError(null) }}
+                    />
+                  </div>
+                )}
 
                 {/* Mensajes de error / éxito */}
                 {error && (
