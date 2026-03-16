@@ -136,8 +136,6 @@ function App() {
       const colFIng   = headerBase.indexOf('F_INGRESO')
       const colFRet   = headerBase.indexOf('F_RETIRO')
       const colSubcli = headerBase.indexOf('SUBCLIENTE')
-      // "CLASIFICACIÓN NO 4" puede tener variaciones de tilde/espacios
-      const colClasif = headerBase.findIndex(h => h.replace(/[^A-Z0-9 ]/g, '').trim() === 'CLASIFICACION NO 4')
 
       console.log('=== BASE DE EMPLEADOS ===')
       console.log('Encabezados encontrados:', headerBase)
@@ -166,9 +164,13 @@ function App() {
           subcliVal = subcliRaw.replace(/^\d+\s*-\s*/, '')
         }
 
-        // CLASIFICACIÓN NO 4: vacío si es "0 - NO APLICA"
-        let clasifRaw = colClasif !== -1 ? String(fila[colClasif] ?? '').trim() : ''
-        let clasifVal = /^0\s*-\s*NO APLICA/i.test(clasifRaw) ? '' : clasifRaw
+        // Customer ID: tomar solo el prefijo numérico de SUBCLIENTE (ej. "06 - ..." => "06")
+        // Si es "0 - NO APLICA", dejar vacío.
+        let clasifVal = ''
+        if (subcliRaw && !/^0\s*-\s*NO APLICA/i.test(subcliRaw)) {
+          const m = subcliRaw.match(/^(\d+)\s*-/)
+          clasifVal = m ? m[1] : ''
+        }
 
         mapaEmpleados.set(codigo, {
           alt:      colAlt    !== -1 ? String(fila[colAlt]    ?? '').trim() : '',
