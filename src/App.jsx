@@ -762,8 +762,18 @@ function App() {
         for (let r = 4; r <= worksheet.rowCount; r++) {
           todasLasCols.forEach(col => { worksheet.getRow(r).getCell(col).value = null })
         }
+        // Limpieza defensiva: eliminar cualquier fórmula residual del template en filas de datos.
+        // Evita referencias circulares en columnas que no reconstruimos explícitamente.
+        for (let r = 4; r <= worksheet.rowCount; r++) {
+          const row = worksheet.getRow(r)
+          row.eachCell({ includeEmpty: false }, (cell) => {
+            const v = cell.value
+            if (v && typeof v === 'object' && v.formula) cell.value = null
+          })
+        }
 
         const sinUSD = ['C1042 - EPDM', 'C1055 - RIVERMATE', 'C1058 - POC PHARMA'].includes(cliente)
+        const esRemofirst = cliente === 'C1037 - REMOFIRST'
 
         // Helpers de conversión columna ↔ letra Excel
         const numToLetter = (n) => {
@@ -799,11 +809,13 @@ function App() {
           escribirCelda(colName,     empData.nombre || null)
           escribirCelda(colOnboard,  empData.fIngreso)
           escribirCelda(colOffboard, empData.fRetiro)
-          escribirCelda(colCustName, empData.subcli || null)
-          escribirCelda(colCustId,   empData.clasif || null)
+          if (esRemofirst) {
+            escribirCelda(colCustName, empData.subcli || null)
+            escribirCelda(colCustId,   empData.clasif || null)
+          }
           // Valores fijos por fila
-          const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-          const mesActual = MESES_ES[new Date().getMonth()]
+          const MESES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December']
+          const mesActual = MESES_EN[new Date().getMonth()]
           escribirCelda(colSvcType,  'Monthly Payroll')
           escribirCelda(colPayMonth, mesActual)
           escribirCelda(colCountry,  'Colombia')
@@ -900,9 +912,37 @@ function App() {
             if (v !== null && v !== undefined && v !== '') colsConDatos.add(colNum)
           })
         })
+
+        // 2.1 Eliminaciones condicionales explícitas (sin depender de "columna vacía")
+        const forcedRemoveCols = new Set([
+          // Configuración por cliente
+          cfg.banking ? -1 : colBanking,
+          cfg.iva ? -1 : colIva,
+          cfg.iva && !sinUSD ? -1 : colVAT,
+
+          // Clientes que no usan bloque USD
+          sinUSD ? colExchangeRate : -1,
+          sinUSD ? colTotalEmpCostUSD : -1,
+          sinUSD ? colFeeUSD : -1,
+          sinUSD ? colTotalUSD : -1,
+
+          // Customer fields: solo REMOFIRST
+          esRemofirst ? -1 : colCustName,
+          esRemofirst ? -1 : colCustId,
+
+          // Sin provisiones: eliminar columnas base + 2° TOTAL + TOTAL LEGAL
+          tieneProvisiones ? -1 : colsDestino['13th Salary'],
+          tieneProvisiones ? -1 : colsDestino['14th Salary'],
+          tieneProvisiones ? -1 : colsDestino['Interest on 14th Salary'],
+          tieneProvisiones ? -1 : (totalesHeaders[1] ?? -1),
+          tieneProvisiones ? -1 : colTotalLegal,
+        ].filter(c => c !== -1))
+
         const emptyColSet = new Set()
         for (let col = 1; col <= maxCols; col++) {
-          if (!colsConDatos.has(col) && !protectedCols.has(col)) emptyColSet.add(col)
+          // Regla global desactivada por solicitud:
+          // if (!colsConDatos.has(col) && !protectedCols.has(col)) emptyColSet.add(col)
+          if (forcedRemoveCols.has(col) && !protectedCols.has(col)) emptyColSet.add(col)
         }
 
         // 3. Mapa de columna original → nueva posición tras las eliminaciones
@@ -939,6 +979,9 @@ function App() {
         // Después de desunir todo: si la top-left va a ser eliminada, propagar
         // valor y estilo a la primera celda superviviente del rango (ya no son esclavas)
         savedMerges.forEach(({ tl, br, tlValue, tlStyle }) => {
+          // Solo necesitamos propagar contenido visual de encabezados.
+          // En filas de datos podría copiar fórmulas residuales y causar referencias circulares.
+          if (tl.row > 3) return
           if (!emptyColSet.has(tl.col)) return  // top-left sobrevive, no hace falta propagar
           if (tlValue === null && Object.keys(tlStyle).length === 0) return  // nada que propagar
           for (let c = tl.col + 1; c <= br.col; c++) {
@@ -1042,8 +1085,10 @@ function App() {
         const sty5 = (pc) => { const orig = colOrigFromNew[pc]; const s = (orig ? (estilosRow5[orig] || estilosRef[orig]) : null); return s ? JSON.parse(JSON.stringify(s)) : {} }
         // Helper: SUM de lista de columnas para una fila
         const L = (c) => numToLetter(c)
-        const sumCols = (cols, rowNum) => {
-          const valid = cols.filter(c => c && c !== -1)
+        const sumCols = (cols, rowNum, targetCol = null) => {
+          const valid = [...new Set(cols)]
+            .filter(c => c && c !== -1)
+            .filter(c => targetCol === null ? true : c !== targetCol)
           if (valid.length === 0) return null
           return `SUM(${valid.map(c => `${L(c)}${rowNum}`).join(',')})`
         }
@@ -1079,28 +1124,28 @@ function App() {
           const row = worksheet.getRow(rowNum)
 
           if (pcPayments !== -1) {
-            const f = sumCols(paymentCols, rowNum)
+            const f = sumCols(paymentCols, rowNum, pcPayments)
             if (f) { row.getCell(pcPayments).value = { formula: f }; row.getCell(pcPayments).style = sty(pcPayments) }
           }
           if (pcTotalSS !== -1) {
-            const f = sumCols(ssCols, rowNum)
+            const f = sumCols(ssCols, rowNum, pcTotalSS)
             if (f) { row.getCell(pcTotalSS).value = { formula: f }; row.getCell(pcTotalSS).style = sty(pcTotalSS) }
           }
           if (pcTotalProv !== -1) {
-            const f = sumCols(provCols, rowNum)
+            const f = sumCols(provCols, rowNum, pcTotalProv)
             if (f) { row.getCell(pcTotalProv).value = { formula: f }; row.getCell(pcTotalProv).style = sty(pcTotalProv) }
           }
           if (pcTotalLegal !== -1) {
-            const f = sumCols([pcTotalSS, pcTotalProv].filter(c => c !== -1), rowNum)
+            const f = sumCols([pcTotalSS, pcTotalProv].filter(c => c !== -1), rowNum, pcTotalLegal)
             if (f) { row.getCell(pcTotalLegal).value = { formula: f }; row.getCell(pcTotalLegal).style = sty(pcTotalLegal) }
           }
           if (pcTotalOther !== -1) {
-            const f = sumCols(otherCols, rowNum)
+            const f = sumCols(otherCols, rowNum, pcTotalOther)
             if (f) { row.getCell(pcTotalOther).value = { formula: f }; row.getCell(pcTotalOther).style = sty(pcTotalOther) }
           }
           // BANKING TAX
           if (pcBanking !== -1 && cfg.banking) {
-            const base = [pcPayments, pcTotalSS, pcTotalProv, pcTotalOther].filter(c => c !== -1)
+            const base = [pcPayments, pcTotalSS, pcTotalProv, pcTotalOther].filter(c => c !== -1 && c !== pcBanking)
             if (base.length > 0) {
               row.getCell(pcBanking).value = { formula: `(${base.map(c => `${L(c)}${rowNum}`).join('+')})*0.004` }
               row.getCell(pcBanking).style = sty(pcBanking)
@@ -1110,15 +1155,15 @@ function App() {
           if (pcTotalEmpCost !== -1) {
             const parts = [pcPayments, pcTotalSS, pcTotalProv, pcTotalOther,
               cfg.banking && pcBanking !== -1 ? pcBanking : -1].filter(c => c !== -1)
-            const f = sumCols(parts, rowNum)
+            const f = sumCols(parts, rowNum, pcTotalEmpCost)
             if (f) { row.getCell(pcTotalEmpCost).value = { formula: f }; row.getCell(pcTotalEmpCost).style = sty(pcTotalEmpCost) }
           }
           // FEE
           if (pcFee !== -1 && cfg.fee) {
             let feeFormula
             const esPorcentaje = cfg.fee.endsWith('%')
-            if (esPorcentaje && pcTotalEmpCost !== -1) {
-              feeFormula = cfg.banking && pcBanking !== -1
+            if (esPorcentaje && pcTotalEmpCost !== -1 && pcFee !== pcTotalEmpCost) {
+              feeFormula = cfg.banking && pcBanking !== -1 && pcBanking !== pcFee
                 ? `${cfg.fee}*(${L(pcTotalEmpCost)}${rowNum}+${L(pcBanking)}${rowNum})`
                 : `${cfg.fee}*${L(pcTotalEmpCost)}${rowNum}`
             } else if (cliente === 'C1055 - RIVERMATE') {
@@ -1133,39 +1178,39 @@ function App() {
             if (feeFormula) { row.getCell(pcFee).value = { formula: feeFormula }; row.getCell(pcFee).style = sty(pcFee) }
           }
           // IVA
-          if (pcIva !== -1 && cfg.iva && pcFee !== -1) {
+          if (pcIva !== -1 && cfg.iva && pcFee !== -1 && pcIva !== pcFee) {
             row.getCell(pcIva).value = { formula: `${L(pcFee)}${rowNum}*0.19` }
             row.getCell(pcIva).style = sty(pcIva)
           }
           // TOTAL COP
           if (pcTotalCOP !== -1) {
             const parts = [pcTotalEmpCost, pcFee, cfg.iva && pcIva !== -1 ? pcIva : -1].filter(c => c !== -1)
-            const f = sumCols(parts, rowNum)
+            const f = sumCols(parts, rowNum, pcTotalCOP)
             if (f) { row.getCell(pcTotalCOP).value = { formula: f }; row.getCell(pcTotalCOP).style = sty(pcTotalCOP) }
           }
           // TOTAL EMPLOYEE COST USD
-          if (!sinUSD && pcTotalEmpCostUSD !== -1 && pcTotalEmpCost !== -1 && pcExchangeRate !== -1) {
+          if (!sinUSD && pcTotalEmpCostUSD !== -1 && pcTotalEmpCost !== -1 && pcExchangeRate !== -1 && pcTotalEmpCostUSD !== pcTotalEmpCost && pcTotalEmpCostUSD !== pcExchangeRate) {
             row.getCell(pcTotalEmpCostUSD).value = { formula: `ROUND(${L(pcTotalEmpCost)}${rowNum}/${L(pcExchangeRate)}${rowNum},2)` }
             row.getCell(pcTotalEmpCostUSD).style = sty(pcTotalEmpCostUSD)
           }
           // FEE USD
-          if (!sinUSD && pcFeeUSD !== -1 && pcFee !== -1 && pcExchangeRate !== -1) {
+          if (!sinUSD && pcFeeUSD !== -1 && pcFee !== -1 && pcExchangeRate !== -1 && pcFeeUSD !== pcFee && pcFeeUSD !== pcExchangeRate) {
             row.getCell(pcFeeUSD).value = { formula: `ROUND(${L(pcFee)}${rowNum}/${L(pcExchangeRate)}${rowNum},2)` }
             row.getCell(pcFeeUSD).style = sty(pcFeeUSD)
           }
           // VAT
-          if (!sinUSD && pcVAT !== -1 && cfg.iva && pcIva !== -1 && pcExchangeRate !== -1) {
+          if (!sinUSD && pcVAT !== -1 && cfg.iva && pcIva !== -1 && pcExchangeRate !== -1 && pcVAT !== pcIva && pcVAT !== pcExchangeRate) {
             row.getCell(pcVAT).value = { formula: `ROUND(${L(pcIva)}${rowNum}/${L(pcExchangeRate)}${rowNum},2)` }
             row.getCell(pcVAT).style = sty(pcVAT)
           }
           // TOTAL USD
           if (!sinUSD && pcTotalUSD !== -1) {
             const parts = [pcTotalEmpCostUSD, pcFeeUSD, cfg.iva && pcVAT !== -1 ? pcVAT : -1].filter(c => c !== -1)
-            const f = sumCols(parts, rowNum)
+            const f = sumCols(parts, rowNum, pcTotalUSD)
             if (f) { row.getCell(pcTotalUSD).value = { formula: f }; row.getCell(pcTotalUSD).style = sty(pcTotalUSD) }
           }
           // ER SS Rate % — solo REMOFIRST
-          if (pcErSs !== -1 && cliente === 'C1037 - REMOFIRST' && pcErSsRef) {
+          if (pcErSs !== -1 && cliente === 'C1037 - REMOFIRST' && pcErSsRef && pcErSsRef !== pcErSs) {
             row.getCell(pcErSs).value = { formula: `IF(${L(pcErSsRef)}${rowNum}>0,31.94,14.44)` }
             row.getCell(pcErSs).style = sty(pcErSs)
           }
