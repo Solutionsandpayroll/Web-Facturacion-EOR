@@ -1339,22 +1339,43 @@ function App() {
                 <li>
                   <span className="step-number">1</span>
                   <div>
-                    <strong>Paso 1</strong>
-                    <p>Descripción del primer paso</p>
+                    <strong>Selecciona el periodo</strong>
+                    <p>Escribe el periodo de facturación (ej: <em>Enero 2026</em>). Este texto se usará en el nombre del archivo generado.</p>
                   </div>
                 </li>
                 <li>
                   <span className="step-number">2</span>
                   <div>
-                    <strong>Paso 2</strong>
-                    <p>Descripción del segundo paso</p>
+                    <strong>Carga la base de empleados</strong>
+                    <p>Arrastra o selecciona el archivo Excel de base de empleados (contiene nombres, fechas de ingreso/retiro, subclienta, etc.).</p>
                   </div>
                 </li>
                 <li>
                   <span className="step-number">3</span>
                   <div>
-                    <strong>Paso 3</strong>
-                    <p>Descripción del tercer paso</p>
+                    <strong>Carga el reporte de Novasoft</strong>
+                    <p>Arrastra o selecciona el archivo Excel exportado desde Novasoft con los conceptos de nómina del periodo.</p>
+                  </div>
+                </li>
+                <li>
+                  <span className="step-number">4</span>
+                  <div>
+                    <strong>Selecciona los clientes a facturar</strong>
+                    <p>Marca uno o varios clientes de la lista. Se generará un archivo Excel independiente por cada cliente seleccionado.</p>
+                  </div>
+                </li>
+                <li>
+                  <span className="step-number">5</span>
+                  <div>
+                    <strong>Ingresa la tasa de cambio USD → COP</strong>
+                    <p>Escribe el valor de la tasa de cambio del dólar a peso colombiano vigente para el periodo.</p>
+                  </div>
+                </li>
+                <li>
+                  <span className="step-number">6</span>
+                  <div>
+                    <strong>Genera los archivos</strong>
+                    <p>Haz clic en <em>Generar Excel</em>. El sistema procesará cada cliente y descargará automáticamente un archivo Excel con la facturación lista, incluyendo fórmulas, formatos y columnas ajustadas según el cliente.</p>
                   </div>
                 </li>
               </ol>
