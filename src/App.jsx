@@ -1100,17 +1100,24 @@ function App() {
           'SALARY', '"Sick" Leave', 'Alloawance 1 (Car Allowance)', 'Unused Holidays',
           'Overtime', 'Bonus/Commission', 'Deduction or Gross Amount adjustments prevous month',
           'Alloawance 2 (Mobile & Internet Allowance)', 'Food allowance',
-          'Home/Remote work allowance', 'Alloawance 4 (Other allowances)',
+          'Alloawance 3 (Home/Remote work allowance)', 'Home/Remote work allowance', 'Alloawance 4 (Other allowances)',
           'Sign-on Bonus', 'Transport allowance', 'Wellness Allowance',
           'On Call/ Plus Disponibilidad', 'Severance Pay (Taxable)',
-          'Rectroactive payment/Plus Compensation', 'Paternity/ Maternity leave',
+          'Rectroactive payment/Plus Compensation', 'Paternity/ Maternity leave', 'Lieu of Notice',
         ]
         const TOTAL_SS_GRUPOS    = ['Family Fund Cost', 'Health Cost', 'ICBF cost', 'Labor Risk Cost', 'SENA Cost', 'Pension Cost']
         const TOTAL_PROV_GRUPOS  = ['13th Salary', '14th Salary', 'Interest on 14th Salary']
         const TOTAL_OTHER_GRUPOS = ['Expenses', 'Health Insurance', 'Medical Test']
         const TOTAL_OTHER_EXTRA  = ['LEAVE PAID REFOUND', 'PARKING COST', 'LIEU OF NOTICE']
 
-        const paymentCols = PAYMENT_GRUPOS.map(g => pcDestino[g]).filter(c => c && c !== -1)
+        const PAYMENT_EXTRA_HEADERS = [
+          'ALLOAWANCE 3 (HOME/REMOTE WORK ALLOWANCE)',
+          'LIEU OF NOTICE',
+        ]
+        const paymentCols = [
+          ...PAYMENT_GRUPOS.map(g => pcDestino[g]),
+          ...PAYMENT_EXTRA_HEADERS.map(h => postCols[h]),
+        ].filter(c => c && c !== -1)
         const ssCols      = TOTAL_SS_GRUPOS.map(g => pcDestino[g]).filter(c => c && c !== -1)
         const provCols    = TOTAL_PROV_GRUPOS.map(g => pcDestino[g]).filter(c => c && c !== -1)
         const otherCols   = [
@@ -1227,6 +1234,7 @@ function App() {
         const rowTotals = worksheet.getRow(filaTotal)
         const todasNumCols = new Set([
           ...Object.values(pcDestino).filter(c => c && c !== -1),
+          ...PAYMENT_EXTRA_HEADERS.map(h => postCols[h]).filter(c => c && c !== -1),
           pcPayments, pcTotalSS, pcTotalProv, pcTotalLegal, pcTotalOther, pcTotalEmpCost,
           cfg.fee     && pcFee     !== -1 ? pcFee     : -1,
           cfg.banking && pcBanking !== -1 ? pcBanking : -1,
