@@ -1235,6 +1235,7 @@ function App() {
         const todasNumCols = new Set([
           ...Object.values(pcDestino).filter(c => c && c !== -1),
           ...PAYMENT_EXTRA_HEADERS.map(h => postCols[h]).filter(c => c && c !== -1),
+          ...['LEAVE PAID REFOUND', 'PARKING COST'].map(h => postCols[h]).filter(c => c && c !== -1),
           pcPayments, pcTotalSS, pcTotalProv, pcTotalLegal, pcTotalOther, pcTotalEmpCost,
           cfg.fee     && pcFee     !== -1 ? pcFee     : -1,
           cfg.banking && pcBanking !== -1 ? pcBanking : -1,
