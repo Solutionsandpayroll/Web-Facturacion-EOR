@@ -351,7 +351,7 @@ function App() {
           ],
         },
         {
-          columnaDestino: 'Home/Remote work allowance',
+          columnaDestino: 'Alloawance 3 (Home/Remote work allowance)',
           conceptos: [
             '101319 Auxilio de Computador',
           ],
