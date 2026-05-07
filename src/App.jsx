@@ -1,55 +1,38 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
+import { neon } from '@neondatabase/serverless'
 import './App.css'
 
-const CLIENTES = [...new Set([
-  'C1007 - NZD',
-  'C1024 - MKD',
-  'C1032 - FLEXCO',
-  'C1038 - ONCEHUB',
-  'C1041 - EDRINGTON',
-  'C1042 - EPDM',
-  'C1043 - NEO',
-  'C1050 - HEMMERSBACH',
-  'C1051 - YONYOU',
-  'C1052 - BUBBLE BPM INC',
-  'C1053 - GLOBAL EXPANSION',
-  'C1055 - RIVERMATE',
-  'C1037 - REMOFIRST',
-  'C1029 - INSIDER',
-  'C1036 - ACTION AD',
-  'C1056 - EUROPORTAGE',
-  'C1022 - Root Capital',
-  'C1058 - POC PHARMA',
-  'C1059 - SIFFI',
-])]
+const sql = neon(import.meta.env.VITE_DATABASE_URL)
 
-// fee: coeficiente para la fórmula FEE (porcentaje como '6%' o valor fijo como '120')
-// iva: true = fórmula =$BC{fila}*19%, false = vacío
-// banking: true = fórmula =SUMA($AF{fila};$AN{fila};$AS{fila};$AZ{fila})*0,4%, false = vacío
-const CONFIG_CLIENTES = {
-  'C1007 - NZD':               { fee: '6%',     iva: false, banking: false },
-  'C1024 - MKD':               { fee: '11%',    iva: false, banking: false },
-  'C1032 - FLEXCO':            { fee: '9%',     iva: false, banking: false },
-  'C1038 - ONCEHUB':           { fee: '100.84', iva: true,  banking: true  },
-  'C1041 - EDRINGTON':         { fee: '5.5%',   iva: false, banking: false },
-  'C1042 - EPDM':              { fee: '10%',    iva: false, banking: false },
-  'C1043 - NEO':               { fee: '8%',     iva: false, banking: false },
-  'C1050 - HEMMERSBACH':       { fee: '10%',    iva: false, banking: false },
-  'C1051 - YONYOU':            { fee: '210',    iva: true,  banking: true  },
-  'C1052 - BUBBLE BPM INC':    { fee: '11%',    iva: false, banking: false },
-  'C1053 - GLOBAL EXPANSION':  { fee: '150',    iva: true,  banking: true  },
-  'C1055 - RIVERMATE':         { fee: '150',    iva: false, banking: true  },
-  'C1037 - REMOFIRST':         { fee: '120',    iva: true,  banking: true  },
-  'C1029 - INSIDER':           { fee: '190',    iva: true,  banking: true  },
-  'C1036 - ACTION AD':         { fee: '11%',    iva: false, banking: false },
-  'C1056 - EUROPORTAGE':       { fee: '200',    iva: true,  banking: true  },
-  'C1022 - Root Capital':      { fee: '9%',     iva: false, banking: false },
-  'C1058 - POC PHARMA':        { fee: '160',    iva: false, banking: true  },
-  'C1059 - SIFFI':             { fee: '10%',    iva: false, banking: true  },
+// Configuración por defecto (hardcoded como fallback y para el botón "Restablecer")
+// fee: '6%' = porcentaje, '120' = valor fijo; sin_usd = oculta bloque USD; es_liquidacion = usa conceptos de liquidación
+const DEFAULT_CONFIG_CLIENTES = {
+  'C1007 - NZD':               { fee: '6%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1024 - MKD':               { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1032 - FLEXCO':            { fee: '9%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1038 - ONCEHUB':           { fee: '100.84', iva: true,  banking: true,  sin_usd: false, es_liquidacion: true  },
+  'C1041 - EDRINGTON':         { fee: '5.5%',   iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1042 - EPDM':              { fee: '10%',    iva: false, banking: false, sin_usd: true,  es_liquidacion: false },
+  'C1043 - NEO':               { fee: '8%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1050 - HEMMERSBACH':       { fee: '10%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1051 - YONYOU':            { fee: '210',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
+  'C1052 - BUBBLE BPM INC':    { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1053 - GLOBAL EXPANSION':  { fee: '150',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
+  'C1055 - RIVERMATE':         { fee: '150',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false },
+  'C1037 - REMOFIRST':         { fee: '120',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
+  'C1029 - INSIDER':           { fee: '190',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: true  },
+  'C1036 - ACTION AD':         { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1056 - EUROPORTAGE':       { fee: '200',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
+  'C1022 - Root Capital':      { fee: '9%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
+  'C1058 - POC PHARMA':        { fee: '160',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false },
+  'C1059 - SIFFI':             { fee: '10%',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false },
+  'C1060 - BETTEBUNA':         { fee: '10%',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false },
 }
+
+const CLIENTES = Object.keys(DEFAULT_CONFIG_CLIENTES)
 
 function App() {
   const [isHelpExpanded, setIsHelpExpanded] = useState(false)
@@ -70,6 +53,20 @@ function App() {
   const [error, setError] = useState(null)
   const [exitoCount, setExitoCount] = useState(0)
 
+  // ── Panel de configuración de clientes (Neon DB) ──
+  const [clientesConfig, setClientesConfig] = useState(DEFAULT_CONFIG_CLIENTES)
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [configLoading, setConfigLoading] = useState(false)
+  const [configError, setConfigError] = useState(null)
+  const [editando, setEditando] = useState(null)   // code del cliente en edición
+  const [editForm, setEditForm] = useState({})     // valores del formulario activo
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [activeTab, setActiveTab] = useState('facturacion')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addForm, setAddForm] = useState({ code: '', fee: '10%', iva: false, banking: false, sin_usd: false, es_liquidacion: false })
+  const [addingClient, setAddingClient] = useState(false)
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -80,13 +77,117 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // ── Cargar configuración desde Neon DB ──────────────────────────────────────
+  const loadConfig = useCallback(async () => {
+    setConfigLoading(true)
+    setConfigError(null)
+    try {
+      const rows = await sql`
+        SELECT code, fee, iva, banking, sin_usd, es_liquidacion
+        FROM clientes_config
+        WHERE activo = true
+        ORDER BY code
+      `
+      const cfg = {}
+      rows.forEach(row => {
+        cfg[row.code] = {
+          fee:           row.fee,
+          iva:           row.iva,
+          banking:       row.banking,
+          sin_usd:       row.sin_usd,
+          es_liquidacion: row.es_liquidacion,
+        }
+      })
+      setClientesConfig(Object.keys(cfg).length > 0 ? cfg : DEFAULT_CONFIG_CLIENTES)
+    } catch (err) {
+      console.error('Error al cargar configuración desde DB:', err)
+      setConfigError('No se pudo conectar con la base de datos. Se usan los valores por defecto.')
+      setClientesConfig(DEFAULT_CONFIG_CLIENTES)
+    } finally {
+      setConfigLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadConfig() }, [loadConfig])
+
+  // ── Guardar un cliente en DB ────────────────────────────────────────────────
+  const saveClienteConfig = async (code, cfg) => {
+    setSavingConfig(true)
+    setConfigError(null)
+    try {
+      await sql`
+        UPDATE clientes_config
+        SET fee          = ${cfg.fee},
+            iva          = ${cfg.iva},
+            banking      = ${cfg.banking},
+            sin_usd      = ${cfg.sin_usd},
+            es_liquidacion = ${cfg.es_liquidacion}
+        WHERE code = ${code}
+      `
+      await loadConfig()
+      setEditando(null)
+    } catch (err) {
+      console.error('Error al guardar configuración:', err)
+      setConfigError(`Error al guardar "${code}": ${err.message}`)
+    } finally {
+      setSavingConfig(false)
+    }
+  }
+
+  // ── Restablecer todos los valores por defecto en DB ─────────────────────────
+  const resetToDefaults = async () => {
+    if (!window.confirm('¿Restablecer todos los clientes a la configuración inicial? Esto sobreescribirá los cambios guardados en la base de datos.')) return
+    setResetting(true)
+    setConfigError(null)
+    try {
+      for (const [code, cfg] of Object.entries(DEFAULT_CONFIG_CLIENTES)) {
+        await sql`
+          UPDATE clientes_config
+          SET fee          = ${cfg.fee},
+              iva          = ${cfg.iva},
+              banking      = ${cfg.banking},
+              sin_usd      = ${cfg.sin_usd},
+              es_liquidacion = ${cfg.es_liquidacion}
+          WHERE code = ${code}
+        `
+      }
+      await loadConfig()
+    } catch (err) {
+      console.error('Error al restablecer configuración:', err)
+      setConfigError(`Error al restablecer: ${err.message}`)
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const addCliente = async () => {
+    const code = addForm.code.trim()
+    if (!code) return setConfigError('El código del cliente es obligatorio.')
+    if (clientesConfig[code]) return setConfigError(`El cliente "${code}" ya existe.`)
+    setAddingClient(true)
+    setConfigError(null)
+    try {
+      await sql`
+        INSERT INTO clientes_config (code, name, fee, iva, banking, sin_usd, es_liquidacion, activo)
+        VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, true)
+      `
+      await loadConfig()
+      setAddForm({ code: '', fee: '10%', iva: false, banking: false, sin_usd: false, es_liquidacion: false })
+      setShowAddForm(false)
+    } catch (err) {
+      setConfigError(`Error al agregar cliente: ${err.message}`)
+    } finally {
+      setAddingClient(false)
+    }
+  }
+
   const toggleCliente = (cliente) => {
     setClientesSeleccionados(prev =>
       prev.includes(cliente) ? prev.filter(c => c !== cliente) : [...prev, cliente]
     )
   }
 
-  const clientesFiltrados = CLIENTES.filter(c =>
+  const clientesFiltrados = Object.keys(clientesConfig).filter(c =>
     c.toLowerCase().includes(busqueda.toLowerCase())
   )
 
@@ -622,9 +723,9 @@ function App() {
 
       // --- 4. Generar un archivo por cada cliente seleccionado ---
       for (const cliente of clientesSeleccionados) {
-        // Clientes que usan conceptos de liquidación (no provisiones) para 13th/14th/Interest
-        const CLIENTES_LIQUIDACION = ['C1038 - ONCEHUB', 'C1029 - INSIDER']
-        const esLiquidacion = CLIENTES_LIQUIDACION.includes(cliente)
+        const cfg = clientesConfig[cliente] || DEFAULT_CONFIG_CLIENTES[cliente] || {}
+        // Flags derivados de la configuración (DB o defecto)
+        const esLiquidacion = !!cfg.es_liquidacion
 
         // Filtrar códigos para este cliente
         const codigosFiltrados = codigosNova.filter(codigo => {
@@ -705,8 +806,6 @@ function App() {
         })
 
         const [colTotalSS, colTotalProv, colTotalOther] = [...totalesHeaders, -1, -1, -1]
-        const cfg = CONFIG_CLIENTES[cliente] || {}
-
         console.log('colEC:', colEC, '| colsDestino:', colsDestino)
         if (colEC === -1) throw new Error('No se encontró la columna "EMPLOYEE CODE" en la fila 3 de la plantilla.')
 
@@ -774,7 +873,7 @@ function App() {
           })
         }
 
-        const sinUSD = ['C1042 - EPDM', 'C1055 - RIVERMATE', 'C1058 - POC PHARMA'].includes(cliente)
+        const sinUSD = !!cfg.sin_usd
         const esRemofirst = cliente === 'C1037 - REMOFIRST'
 
         // Helpers de conversión columna ↔ letra Excel
@@ -1359,7 +1458,41 @@ function App() {
         </div>
       </header>
 
-      {/* Contenido Principal */}
+      {/* Navegación por pestañas */}
+      <nav className="tab-nav">
+        <div className="container">
+          <div className="tab-bar">
+            <button
+              className={`tab-btn ${activeTab === 'facturacion' ? 'active' : ''}`}
+              onClick={() => setActiveTab('facturacion')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              Facturación
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
+              onClick={() => setActiveTab('config')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+                <path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>
+              </svg>
+              Configuración de Clientes
+              {configLoading && <span className="tab-badge">Cargando…</span>}
+              {!configLoading && !configError && <span className="tab-badge ok">DB</span>}
+              {configError && <span className="tab-badge err">!</span>}
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {activeTab === 'facturacion' && (
       <main className="main-content">
         <div className="container">
           
@@ -1795,6 +1928,273 @@ function App() {
           </div>
         </div>
       </main>
+      )}
+
+      {activeTab === 'config' && (
+      <section className="admin-section config-tab">
+        <div className="container">
+
+          {/* ── Glosario de columnas ── */}
+          <div className="admin-glossary">
+            <h3 className="glossary-title">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              Guía de columnas — ¿qué significa cada configuración?
+            </h3>
+            <div className="glossary-grid">
+
+              <div className="glossary-item">
+                <div className="glossary-col-name"><span className="badge-fee">Fee</span></div>
+                <p>Es el cargo de gestión que S&amp;P cobra al cliente por empleado. Puede ser un <strong>porcentaje</strong> del costo total del empleado (ej: <code>10%</code>) o un <strong>valor fijo en USD</strong> que se multiplica por la tasa de cambio del periodo (ej: <code>120</code> = USD 120 × TRM). Si el cliente no necesita conversión USD, el valor fijo se multiplica directamente por la tasa EUR si aplica.</p>
+              </div>
+
+              <div className="glossary-item">
+                <div className="glossary-col-name">
+                  <span className="dot dot-on glossary-dot"/><span className="dot dot-off glossary-dot"/> IVA
+                </div>
+                <p><strong><span className="dot dot-on glossary-dot"/> Verde (activo):</strong> se genera la columna <em>IVA</em> en el Excel con la fórmula <code>Fee × 19%</code>, y además la columna <em>VAT</em> (IVA convertido a USD). <strong><span className="dot dot-off glossary-dot"/> Gris (inactivo):</strong> ambas columnas se eliminan del archivo generado.</p>
+              </div>
+
+              <div className="glossary-item">
+                <div className="glossary-col-name">
+                  <span className="dot dot-on glossary-dot"/><span className="dot dot-off glossary-dot"/> Banking Tax
+                </div>
+                <p><strong><span className="dot dot-on glossary-dot"/> Verde (activo):</strong> se calcula el impuesto bancario GMF (gravamen 4×1000) como <code>(Pagos + Costos SS + Provisiones + Otros) × 0.4%</code> y aparece como columna en el Excel. <strong><span className="dot dot-off glossary-dot"/> Gris (inactivo):</strong> la columna Banking Tax no se genera.</p>
+              </div>
+
+              <div className="glossary-item">
+                <div className="glossary-col-name">
+                  <span className="dot dot-on glossary-dot"/><span className="dot dot-off glossary-dot"/> Sin USD
+                </div>
+                <p><strong><span className="dot dot-on glossary-dot"/> Verde (activo):</strong> el cliente factura <em>solo en COP</em> — se eliminan del Excel las columnas <em>Exchange Rate</em>, <em>Total Employee Cost USD</em>, <em>Fee USD</em>, <em>VAT</em> y <em>Total USD</em>. <strong><span className="dot dot-off glossary-dot"/> Gris (inactivo):</strong> se incluyen todas las columnas en USD usando la tasa de cambio ingresada al generar.</p>
+              </div>
+
+              <div className="glossary-item">
+                <div className="glossary-col-name">
+                  <span className="dot dot-on glossary-dot"/><span className="dot dot-off glossary-dot"/> Es Liquidación
+                </div>
+                <p><strong><span className="dot dot-on glossary-dot"/> Verde (activo):</strong> las columnas de <em>Legal Benefits</em> (13th Salary, 14th Salary e Interest on 14th Salary) <strong>no aparecen</strong> en el Excel generado. <strong><span className="dot dot-off glossary-dot"/> Gris (inactivo):</strong> las columnas de <em>Legal Benefits</em> sí se incluyen en el archivo.</p>
+              </div>
+
+            </div>
+          </div>
+
+          {/* ── Tabla de configuración ── */}
+          <div className="admin-card">
+            <div className="admin-body">
+
+              {configError && (
+                <div className="alert alert-error" style={{marginBottom:'1rem'}}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  {configError}
+                </div>
+              )}
+
+              <div className="admin-toolbar">
+                <p className="admin-hint">
+                  Haz clic en <strong>Editar</strong> para modificar la configuración de un cliente. Los cambios se guardan automáticamente en la base de datos.
+                </p>
+                <div className="admin-toolbar-actions">
+                  <button
+                    className="btn-add-client"
+                    onClick={() => { setShowAddForm(f => !f); setConfigError(null) }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Agregar cliente
+                  </button>
+                  <button
+                    className="btn-reset-defaults"
+                    onClick={resetToDefaults}
+                    disabled={resetting || configLoading}
+                    title="Vuelve todos los valores a los originales del sistema"
+                  >
+                    {resetting ? (
+                      <>
+                        <svg className="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                        </svg>
+                        Restableciendo...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="1 4 1 10 7 10"/>
+                          <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
+                        </svg>
+                        Restablecer valores por defecto
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {showAddForm && (
+              <div className="add-client-form">
+                <h4 className="add-client-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  Nuevo cliente
+                </h4>
+                <div className="add-client-fields">
+                  <div className="add-field add-field-code">
+                    <label>Código del cliente <span className="add-field-hint">(debe coincidir exactamente con el valor en la columna CENTRO COSTOS de la base de empleados)</span></label>
+                    <input
+                      className="admin-input"
+                      placeholder="Ej: C1061 - ACME CORP"
+                      value={addForm.code}
+                      onChange={e => setAddForm(f => ({ ...f, code: e.target.value }))}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="add-field add-field-fee">
+                    <label>Fee</label>
+                    <input
+                      className="admin-input"
+                      placeholder="Ej: 10% ó 150"
+                      value={addForm.fee}
+                      onChange={e => setAddForm(f => ({ ...f, fee: e.target.value }))}
+                    />
+                  </div>
+                  <div className="add-field add-field-checks">
+                    <label className="add-check-label">
+                      <input type="checkbox" checked={addForm.iva} onChange={e => setAddForm(f => ({ ...f, iva: e.target.checked }))} />
+                      IVA
+                    </label>
+                    <label className="add-check-label">
+                      <input type="checkbox" checked={addForm.banking} onChange={e => setAddForm(f => ({ ...f, banking: e.target.checked }))} />
+                      Banking Tax
+                    </label>
+                    <label className="add-check-label">
+                      <input type="checkbox" checked={addForm.sin_usd} onChange={e => setAddForm(f => ({ ...f, sin_usd: e.target.checked }))} />
+                      Sin USD
+                    </label>
+                    <label className="add-check-label">
+                      <input type="checkbox" checked={addForm.es_liquidacion} onChange={e => setAddForm(f => ({ ...f, es_liquidacion: e.target.checked }))} />
+                      Es Liquidación
+                    </label>
+                  </div>
+                </div>
+                <div className="add-client-actions">
+                  <button
+                    className="btn-save-row"
+                    onClick={addCliente}
+                    disabled={addingClient || !addForm.code.trim()}
+                  >
+                    {addingClient ? (
+                      <>
+                        <svg className="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                        </svg>
+                        Guardando...
+                      </>
+                    ) : 'Agregar cliente'}
+                  </button>
+                  <button className="btn-cancel-row" onClick={() => setShowAddForm(false)}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+              )}
+
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Fee</th>
+                      <th>IVA</th>
+                      <th>Banking Tax</th>
+                      <th>Sin USD</th>
+                      <th>Es Liquidación</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.keys(clientesConfig).map(code => {
+                      const cfg = clientesConfig[code] || DEFAULT_CONFIG_CLIENTES[code] || {}
+                      const isEditing = editando === code
+                      return (
+                        <tr key={code} className={isEditing ? 'editing' : ''}>
+                          <td className="col-code">{code}</td>
+
+                          {isEditing ? (
+                            <>
+                              <td>
+                                <input
+                                  className="admin-input"
+                                  value={editForm.fee}
+                                  onChange={e => setEditForm(f => ({ ...f, fee: e.target.value }))}
+                                  placeholder="ej: 10% ó 150"
+                                />
+                              </td>
+                              <td className="col-bool">
+                                <input type="checkbox" checked={editForm.iva} onChange={e => setEditForm(f => ({ ...f, iva: e.target.checked }))} />
+                              </td>
+                              <td className="col-bool">
+                                <input type="checkbox" checked={editForm.banking} onChange={e => setEditForm(f => ({ ...f, banking: e.target.checked }))} />
+                              </td>
+                              <td className="col-bool">
+                                <input type="checkbox" checked={editForm.sin_usd} onChange={e => setEditForm(f => ({ ...f, sin_usd: e.target.checked }))} />
+                              </td>
+                              <td className="col-bool">
+                                <input type="checkbox" checked={editForm.es_liquidacion} onChange={e => setEditForm(f => ({ ...f, es_liquidacion: e.target.checked }))} />
+                              </td>
+                              <td className="col-actions">
+                                <button
+                                  className="btn-save-row"
+                                  onClick={() => saveClienteConfig(code, editForm)}
+                                  disabled={savingConfig}
+                                >
+                                  {savingConfig ? '...' : 'Guardar'}
+                                </button>
+                                <button className="btn-cancel-row" onClick={() => setEditando(null)}>
+                                  Cancelar
+                                </button>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td><span className="badge-fee">{cfg.fee}</span></td>
+                              <td className="col-bool">{cfg.iva     ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
+                              <td className="col-bool">{cfg.banking ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
+                              <td className="col-bool">{cfg.sin_usd ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
+                              <td className="col-bool">{cfg.es_liquidacion ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
+                              <td className="col-actions">
+                                <button
+                                  className="btn-edit-row"
+                                  onClick={() => {
+                                    setEditando(code)
+                                    setEditForm({ fee: cfg.fee, iva: !!cfg.iva, banking: !!cfg.banking, sin_usd: !!cfg.sin_usd, es_liquidacion: !!cfg.es_liquidacion })
+                                  }}
+                                >
+                                  Editar
+                                </button>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </section>
+      )}
 
       {/* Footer */}
       <footer className="footer">
