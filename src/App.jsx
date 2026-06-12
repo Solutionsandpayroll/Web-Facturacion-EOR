@@ -1206,6 +1206,18 @@ function App() {
           return Number.isFinite(parsed) ? parsed : null
         }
 
+        const getSheetMaxUsedCol = (sheet, maxRow = sheet.rowCount || 1) => {
+          let maxUsedCol = 1
+          for (let r = 1; r <= maxRow; r++) {
+            sheet.getRow(r).eachCell({ includeEmpty: false }, (cell, colNumber) => {
+              const value = cell.value
+              if (value === null || value === undefined || value === '') return
+              maxUsedCol = Math.max(maxUsedCol, colNumber)
+            })
+          }
+          return maxUsedCol
+        }
+
         const shouldUseHealthInsurance = Boolean(reporteValoresHealth)
         let healthInsuranceMap = new Map()
         if (shouldUseHealthInsurance) {
@@ -1713,15 +1725,11 @@ function App() {
             }
           }
 
+          const novasoftMaxUsedCol = getSheetMaxUsedCol(novasoftSheet)
+          novasoftSheet.spliceColumns(novasoftMaxUsedCol + 1, 20000)
+
           // Recortar columnas finales realmente vacías (evita "colas" de columnas innecesarias)
-          let maxUsedCol = 1
-          for (let r = 1; r <= outputRow; r++) {
-            localSheet.getRow(r).eachCell({ includeEmpty: false }, (cell, colNumber) => {
-              const value = cell.value
-              if (value === null || value === undefined || value === '') return
-              maxUsedCol = Math.max(maxUsedCol, colNumber)
-            })
-          }
+          const maxUsedCol = getSheetMaxUsedCol(localSheet, outputRow)
           if (localSheet.columnCount > maxUsedCol) {
             localSheet.spliceColumns(maxUsedCol + 1, localSheet.columnCount - maxUsedCol)
           }
@@ -1736,9 +1744,8 @@ function App() {
 
           // Excel puede conservar definiciones <col max="16380"> aunque la data termine en BG.
           // Esto hace que visualmente aparezcan columnas vacías hasta XFD.
-          // Se normaliza el XML de hojas para truncar los <col> al ancho real de plantilla (BG).
-          const maxTemplateColXml = XLSX.utils.decode_col('BG') + 1
-          const clampSheetXmlColumns = (sheetXml) => {
+          // Se normaliza el XML de cada hoja para truncar los <col> a su ancho real.
+          const clampSheetXmlColumns = (sheetXml, maxCol) => {
             let xml = String(sheetXml ?? '')
             xml = xml.replace(/<cols>[\s\S]*?<\/cols>/g, (colsBlock) => {
               const colTags = [...colsBlock.matchAll(/<col[^>]*\/>/g)].map(m => m[0])
@@ -1752,8 +1759,8 @@ function App() {
                 }
                 const min = parseInt(minMatch[1], 10)
                 const max = parseInt(maxMatch[1], 10)
-                if (min > maxTemplateColXml) return
-                const clampedMax = Math.min(max, maxTemplateColXml)
+                if (min > maxCol) return
+                const clampedMax = Math.min(max, maxCol)
                 kept.push(tag.replace(/max="\d+"/, `max="${clampedMax}"`))
               })
               return kept.length > 0 ? `<cols>${kept.join('')}</cols>` : ''
@@ -1762,10 +1769,14 @@ function App() {
           }
 
           const zipWorkbook = await JSZip.loadAsync(outBuffer)
-          const templateSheetPath = 'xl/worksheets/sheet1.xml'
-          if (zipWorkbook.file(templateSheetPath)) {
-            const xml = await zipWorkbook.file(templateSheetPath).async('string')
-            zipWorkbook.file(templateSheetPath, clampSheetXmlColumns(xml))
+          const sheetXmlMaxCols = {
+            'xl/worksheets/sheet1.xml': maxTemplateCol,
+            'xl/worksheets/sheet2.xml': novasoftMaxUsedCol,
+          }
+          for (const [sheetPath, maxCol] of Object.entries(sheetXmlMaxCols)) {
+            if (!zipWorkbook.file(sheetPath)) continue
+            const xml = await zipWorkbook.file(sheetPath).async('string')
+            zipWorkbook.file(sheetPath, clampSheetXmlColumns(xml, maxCol))
           }
           outBuffer = await zipWorkbook.generateAsync({ type: 'arraybuffer' })
 
