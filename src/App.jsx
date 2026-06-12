@@ -1056,6 +1056,33 @@ function App() {
           return JSON.parse(JSON.stringify(value))
         }
 
+        const getSafeCopiedCellValue = (cellValue) => {
+          if (cellValue === null || cellValue === undefined) return cellValue
+          if (typeof cellValue !== 'object') return cellValue
+
+          // Evita errores de ExcelJS al clonar formulas (incluidas shared formulas)
+          // al copiar la hoja de Novasoft: conservar solo el resultado visible.
+          if (Object.prototype.hasOwnProperty.call(cellValue, 'formula')) {
+            if (Object.prototype.hasOwnProperty.call(cellValue, 'result')) {
+              return clonePlain(cellValue.result)
+            }
+            return null
+          }
+
+          // Backward/edge compatibility for alternate shared-formula payloads.
+          if (
+            Object.prototype.hasOwnProperty.call(cellValue, 'sharedFormula')
+            || Object.prototype.hasOwnProperty.call(cellValue, 'shareType')
+          ) {
+            if (Object.prototype.hasOwnProperty.call(cellValue, 'result')) {
+              return clonePlain(cellValue.result)
+            }
+            return null
+          }
+
+          return clonePlain(cellValue)
+        }
+
         const copyNovasoftSheetStyled = (targetWorkbook, sheetName) => {
           const targetSheet = targetWorkbook.addWorksheet(sheetName)
           targetSheet.properties = { ...sourceNovasoftSheet.properties }
@@ -1085,7 +1112,7 @@ function App() {
 
             row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
               const targetCell = targetRow.getCell(colNumber)
-              targetCell.value = clonePlain(cell.value)
+              targetCell.value = getSafeCopiedCellValue(cell.value)
               targetCell.style = clonePlain(cell.style) || {}
               if (cell.numFmt) targetCell.numFmt = cell.numFmt
               if (cell.protection) targetCell.protection = clonePlain(cell.protection)
@@ -1116,6 +1143,58 @@ function App() {
           return targetSheet
         }
 
+        const logFormulaObjects = (sheet, label) => {
+          try {
+            const samples = []
+            sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+              row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                const value = cell.value
+                if (!value || typeof value !== 'object') return
+                if (Object.prototype.hasOwnProperty.call(value, 'formula') || Object.prototype.hasOwnProperty.call(value, 'sharedFormula') || Object.prototype.hasOwnProperty.call(value, 'shareType')) {
+                  samples.push({
+                    cell: `${XLSX.utils.encode_col(colNumber - 1)}${rowNumber}`,
+                    keys: Object.keys(value),
+                  })
+                }
+              })
+            })
+            if (samples.length > 0) {
+              console.log(`[FormulaScan] ${label}:`, samples.slice(0, 10))
+            }
+          } catch (e) {}
+        }
+
+        const sanitizeSharedFormulaCells = (sheet, label) => {
+          try {
+            let sanitized = 0
+            sheet.eachRow({ includeEmpty: false }, (row) => {
+              row.eachCell({ includeEmpty: false }, (cell) => {
+                const value = cell.value
+                if (!value || typeof value !== 'object') return
+
+                const isSharedFormula =
+                  Object.prototype.hasOwnProperty.call(value, 'sharedFormula')
+                  || Object.prototype.hasOwnProperty.call(value, 'shareType')
+                  || (
+                    Object.prototype.hasOwnProperty.call(value, 'formula')
+                    && Object.prototype.hasOwnProperty.call(value, 'ref')
+                  )
+
+                if (!isSharedFormula) return
+
+                cell.value = Object.prototype.hasOwnProperty.call(value, 'result')
+                  ? clonePlain(value.result)
+                  : null
+                sanitized++
+              })
+            })
+
+            if (sanitized > 0) {
+              console.log(`[FormulaSanitize] ${label}:`, sanitized)
+            }
+          } catch (e) {}
+        }
+
         const extractConcept = (row, conceptList) => conceptList.reduce((sum, conceptName) => {
           const idx = getCrIndex(conceptName)
           if (idx === -1) return sum
@@ -1127,10 +1206,9 @@ function App() {
           return Number.isFinite(parsed) ? parsed : null
         }
 
-        const selectedClientCodes = clientesSeleccionados.map(cliente => getSelectedClientCode(cliente))
-        const shouldUseHealthInsurance = selectedClientCodes.includes('CR009')
+        const shouldUseHealthInsurance = Boolean(reporteValoresHealth)
         let healthInsuranceMap = new Map()
-        if (shouldUseHealthInsurance && reporteValoresHealth) {
+        if (shouldUseHealthInsurance) {
           if (!healthInsuranceMonth.trim()) {
             throw new Error('Selecciona el mes para la plantilla Valores Health.')
           }
@@ -1273,6 +1351,7 @@ function App() {
           const localWorkbook = new ExcelJS.Workbook()
           await localWorkbook.xlsx.load(tplBuffer)
           const localSheet = localWorkbook.worksheets[0]
+          sanitizeSharedFormulaCells(localSheet, 'TemplateLocal')
 
           // En esta plantilla la fila 5 es la de totales.
           // Evitamos duplicateRow porque puede romper con shared formulas del template.
@@ -1361,11 +1440,11 @@ function App() {
             const onboardingDate = getCrValue(source, 'FECHA ANTIGUEDAD')
             const exchangeRateValue = safeNumber(costaRicaExchangeRate)
             const rowExchangeRate = documentosConTasaUno.has(employeeDocument) ? 1 : (exchangeRateValue || 0)
-            const healthInsuranceDocCandidates = getDocumentoCandidates(employeeDocumentRaw, employeeCode)
-            const healthInsuranceValue = cliente === 'CR009 - REMOFIRST INC'
+            const healthInsuranceDocCandidates = getDocumentoCandidates(employeeCode)
+            const healthInsuranceValue = shouldUseHealthInsurance
               ? (healthInsuranceDocCandidates.map(key => healthInsuranceMap.get(key)).find(value => value !== undefined) ?? null)
               : null
-            if (cliente === 'CR009 - REMOFIRST INC') {
+            if (shouldUseHealthInsurance) {
               console.log('[Health] match', {
                 employeeCode,
                 employeeDocumentRaw,
@@ -1625,6 +1704,7 @@ function App() {
             localWorkbook.removeWorksheet(existingNovasoftSheet.id)
           }
           const novasoftSheet = copyNovasoftSheetStyled(localWorkbook, novasoftSheetName)
+          logFormulaObjects(novasoftSheet, 'NovasoftCopiada')
           const selectedSourceRows = new Set(rowsCliente.map(item => item.sourceRowNumber))
           const firstDetailExcelRow = dataStartRowIndex + 1
           for (let excelRow = novasoftSheet.rowCount; excelRow >= firstDetailExcelRow; excelRow--) {
@@ -3358,7 +3438,7 @@ function App() {
                           </svg>
                           <div className="drop-zone-text">
                             <p className="drop-zone-title">Sube la plantilla Valores Health</p>
-                            <p className="drop-zone-subtitle">Opcional. Se usa para llenar HEALT INSURANCE en REMOFIRST</p>
+                            <p className="drop-zone-subtitle">Opcional. Cruza EMPLEADO con NRO_DOCUMENTO para llenar HEALT INSURANCE</p>
                           </div>
                           <p className="drop-zone-hint">.xlsx / .xls</p>
                         </div>
