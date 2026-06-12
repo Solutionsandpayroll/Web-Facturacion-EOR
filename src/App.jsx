@@ -1740,6 +1740,52 @@ function App() {
             localSheet.spliceColumns(maxTemplateCol + 1, localSheet.columnCount - maxTemplateCol)
           }
 
+          // Intento de insertar una imagen del proyecto en la hoja Novasoft (A1)
+          try {
+            const tryImagePaths = [
+              '/Imagen%20syp.jpg',
+              '/Imagen syp.jpg',
+              '/Logo%20syp.png',
+              '/Logo syp.png',
+            ]
+
+            const arrayBufferToBase64 = (buffer) => {
+              const bytes = new Uint8Array(buffer)
+              const chunkSize = 0x8000
+              let binary = ''
+              for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize)
+                binary += String.fromCharCode.apply(null, chunk)
+              }
+              return btoa(binary)
+            }
+
+            for (const imgPath of tryImagePaths) {
+              try {
+                const resp = await fetch(imgPath)
+                if (!resp.ok) continue
+                const ab = await resp.arrayBuffer()
+                const lower = imgPath.toLowerCase()
+                const ext = lower.endsWith('.png') ? 'png' : (lower.endsWith('.jpg') || lower.endsWith('.jpeg') ? 'jpeg' : 'png')
+                const base64 = arrayBufferToBase64(ab)
+                try {
+                  const imageId = localWorkbook.addImage({ base64, extension: ext })
+                  // Coloca la imagen en A1 (tl col 0,row 0). Ajusta tamaño si es necesario.
+                  // imagen un poco más pequeña (ancho x alto)
+                  novasoftSheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 135, height: 36 } })
+                  console.log('[ImageInsert] inserted', imgPath)
+                  break
+                } catch (e) {
+                  console.warn('[ImageInsert] addImage failed for', imgPath, e)
+                }
+              } catch (e) {
+                // sigue probando otras rutas
+              }
+            }
+          } catch (e) {
+            console.warn('[ImageInsert] unexpected error', e)
+          }
+
           let outBuffer = await localWorkbook.xlsx.writeBuffer()
 
           // Excel puede conservar definiciones <col max="16380"> aunque la data termine en BG.
