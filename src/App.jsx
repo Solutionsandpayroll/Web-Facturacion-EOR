@@ -1453,9 +1453,13 @@ function App() {
             const exchangeRateValue = safeNumber(costaRicaExchangeRate)
             const rowExchangeRate = documentosConTasaUno.has(employeeDocument) ? 1 : (exchangeRateValue || 0)
             const healthInsuranceDocCandidates = getDocumentoCandidates(employeeCode)
-            const healthInsuranceValue = shouldUseHealthInsurance
-              ? (healthInsuranceDocCandidates.map(key => healthInsuranceMap.get(key)).find(value => value !== undefined) ?? null)
-              : null
+            let healthInsuranceValue = null
+            if (shouldUseHealthInsurance) {
+              const rawHealthValue = healthInsuranceDocCandidates.map(key => healthInsuranceMap.get(key)).find(value => value !== undefined) ?? null
+              if (rawHealthValue !== null) {
+                healthInsuranceValue = rawHealthValue * (exchangeRateValue || 0)
+              }
+            }
             if (shouldUseHealthInsurance) {
               console.log('[Health] match', {
                 employeeCode,
@@ -1544,13 +1548,14 @@ function App() {
               const paymentsColLetter = localHeaderToCol[fieldNames.payments.toUpperCase()] ? colLetter(localHeaderToCol[fieldNames.payments.toUpperCase()]) : null
               const firstTotalColLetter = totalCols[0] ? colLetter(totalCols[0]) : null
               const secondTotalColLetter = totalCols[1] ? colLetter(totalCols[1]) : null
-              const bankingTaxColLetter = bankingTaxCol ? colLetter(bankingTaxCol) : null
-              if (paymentsColLetter && firstTotalColLetter && secondTotalColLetter && bankingTaxColLetter) {
-                row.getCell(totalEmployeeCostCol).value = {
-                  formula: `${paymentsColLetter}${rowNumber}+${firstTotalColLetter}${rowNumber}+${secondTotalColLetter}${rowNumber}+${bankingTaxColLetter}${rowNumber}`,
-                }
+              const bankingTaxColLetter = (cfg.banking && bankingTaxCol) ? colLetter(bankingTaxCol) : null
+              if (paymentsColLetter && firstTotalColLetter && secondTotalColLetter) {
+                const parts = [`${paymentsColLetter}${rowNumber}`, `${firstTotalColLetter}${rowNumber}`, `${secondTotalColLetter}${rowNumber}`]
+                if (cfg.banking && bankingTaxColLetter) parts.push(`${bankingTaxColLetter}${rowNumber}`)
+                row.getCell(totalEmployeeCostCol).value = { formula: parts.join('+') }
               } else {
-                setByHeader(row, fieldNames.totalEmployeeCost, totalEmployeeCost || null)
+                const totalEmpCost = totalEmployeeCost + (cfg.banking ? bankingTaxValue : 0)
+                setByHeader(row, fieldNames.totalEmployeeCost, totalEmpCost || null)
               }
             } else {
               setByHeader(row, fieldNames.totalEmployeeCost, totalEmployeeCost || null)
@@ -1627,41 +1632,39 @@ function App() {
             return `SUM(${colLetter}${detailStartRow}:${colLetter}${detailEndRow})`
           }
 
-          ;['PAYMENTS', 'BASIC', 'X100 - APORTE SEG SOCIAL EMPLEADOR', 'X200 - APORTE INS EMPLEADOR', '13TH MONTH (AGUINALDO)', 'TOTAL EMPLOYEE COST', 'FEE', 'BANKING TAX', 'TOTAL EMPLOYEE COST USD', 'FEE USD', 'TOTAL USD'].forEach(header => {
-            const col = localHeaderToCol[header]
-            if (!col) return
-            const colLetter = XLSX.utils.encode_col(col - 1)
-            totalRow.getCell(col).value = { formula: `SUM(${colLetter}${detailStartRow}:${colLetter}${detailEndRow})` }
+          const skipTotalCols = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12])
+          const headerRow3 = localSheet.getRow(3)
+          const colsWithHeader = new Set()
+          headerRow3.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            colsWithHeader.add(colNumber)
           })
 
-          totalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            const currentValue = cell.value
-            const currentFormula = currentValue && typeof currentValue === 'object' && 'formula' in currentValue
-              ? currentValue.formula
-              : null
-            const colLetter = XLSX.utils.encode_col(colNumber - 1)
-            const normalizedFormula = normalizeTotalSumFormula(currentFormula, colLetter)
-            if (normalizedFormula) {
-              cell.value = { formula: normalizedFormula }
-            }
-          })
+          for (let r = 4; r < outputRow; r++) {
+            const dataRow = localSheet.getRow(r)
+            dataRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+              if (cell.value !== null && cell.value !== undefined) return
+              if (!colsWithHeader.has(colNumber)) return
+              cell.value = 0
+            })
+            dataRow.commit()
+          }
 
-          totalRow.commit()
-
+          const removeCols = []
+          if (!cfg.banking && bankingTaxCol) removeCols.push(bankingTaxCol)
           if (cfg.sin_usd) {
-            const removeCols = [
-              'EXCHANGE RATE',
-              'TOTAL EMPLOYEE COST USD',
-              'FEE USD',
-              'TOTAL USD',
-            ]
-              .filter(Boolean)
-              .map(name => localHeaderToCol[name.toUpperCase()])
-              .filter(Boolean)
-              .sort((a, b) => b - a)
+            removeCols.push(
+              ...['EXCHANGE RATE', 'TOTAL EMPLOYEE COST USD', 'FEE USD', 'TOTAL USD']
+                .map(name => localHeaderToCol[name.toUpperCase()])
+                .filter(Boolean)
+            )
+          }
+
+          let headerAfterSplice = localHeaderToCol
+          if (removeCols.length > 0) {
+            removeCols.sort((a, b) => b - a)
             removeCols.forEach(col => localSheet.spliceColumns(col, 1))
 
-            const headerAfterSplice = {}
+            headerAfterSplice = {}
             localSheet.getRow(3).eachCell({ includeEmpty: true }, (cell, colNumber) => {
               const key = String(cell.value ?? '').trim().toUpperCase()
               if (key) headerAfterSplice[key] = colNumber
@@ -1707,6 +1710,57 @@ function App() {
               totalsRow.commit()
             }
           }
+
+          const otherColsRebuilt = []
+          const totalColsRebuilt = []
+          localSheet.getRow(3).eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            const key = String(cell.value ?? '').trim().toUpperCase()
+            if (key === 'TOTAL') totalColsRebuilt.push(colNumber)
+            if (key === 'OTHER') otherColsRebuilt.push(colNumber)
+          })
+
+          const colLetterAfter = (colNumber) => XLSX.utils.encode_col(colNumber - 1)
+
+          const sumHeaders = ['PAYMENTS', 'BASIC', 'X100 - APORTE SEG SOCIAL EMPLEADOR', 'X200 - APORTE INS EMPLEADOR', '13TH MONTH (AGUINALDO)', 'TOTAL EMPLOYEE COST', 'FEE', 'TOTAL EMPLOYEE COST USD', 'FEE USD', 'TOTAL USD', 'HEALT INSURANCE', 'EXPENSES REIMBURSEMENT']
+          if (cfg.banking) sumHeaders.push('BANKING TAX')
+          sumHeaders.forEach(header => {
+            const col = headerAfterSplice[header]
+            if (!col) return
+            totalRow.getCell(col).value = { formula: `SUM(${colLetterAfter(col)}${detailStartRow}:${colLetterAfter(col)}${detailEndRow})` }
+          })
+          otherColsRebuilt.forEach(col => {
+            totalRow.getCell(col).value = { formula: `SUM(${colLetterAfter(col)}${detailStartRow}:${colLetterAfter(col)}${detailEndRow})` }
+          })
+          totalColsRebuilt.forEach(col => {
+            totalRow.getCell(col).value = { formula: `SUM(${colLetterAfter(col)}${detailStartRow}:${colLetterAfter(col)}${detailEndRow})` }
+          })
+
+          totalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            const currentValue = cell.value
+            const currentFormula = currentValue && typeof currentValue === 'object' && 'formula' in currentValue
+              ? currentValue.formula
+              : null
+            const colLetter = XLSX.utils.encode_col(colNumber - 1)
+            const normalizedFormula = normalizeTotalSumFormula(currentFormula, colLetter)
+            if (normalizedFormula) {
+              cell.value = { formula: normalizedFormula }
+            }
+          })
+
+          totalRow.commit()
+
+          const colsWithHeaderAfter = new Set()
+          localSheet.getRow(3).eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            colsWithHeaderAfter.add(colNumber)
+          })
+
+          totalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (cell.value !== null && cell.value !== undefined) return
+            if (!colsWithHeaderAfter.has(colNumber)) return
+            if (skipTotalCols.has(colNumber)) return
+            cell.value = 0
+          })
+          totalRow.commit()
 
           // Agrega una copia del reporte Novasoft con la misma estructura visual
           // y elimina filas que no pertenecen al cliente seleccionado.
