@@ -1026,6 +1026,7 @@ function App() {
           'X100 - APORTE SEG SOCIAL EMPLEADOR': ['H100 - APORTE SEG SOCIAL EMPLEADOR', 'X100 - APORTE SEG SOCIAL EMPLEADOR'],
           'X200 - APORTE INS EMPLEADOR': ['X200 - APORTE INS EMPLEADOR'],
           '13TH MONTH (AGUINALDO)': ['PROVISION AGUINALDO', 'G013 - AGUINALDO'],
+          'EXPENSES REIMBURSEMENT': ['X300 - EXPENSES'],
         }
 
         const reportRows = []
@@ -1433,6 +1434,7 @@ function App() {
             const x100 = extractConcept(source, crConceptMap['X100 - APORTE SEG SOCIAL EMPLEADOR'])
             const x200 = extractConcept(source, crConceptMap['X200 - APORTE INS EMPLEADOR'])
             const thirteenthMonth = extractConcept(source, crConceptMap['13TH MONTH (AGUINALDO)'])
+            const expensesReimbursement = extractConcept(source, crConceptMap['EXPENSES REIMBURSEMENT'])
 
             const clientName = String(getCrValue(source, 'DESC.CCOSTO') ?? '').trim()
             const clientId = String(getCrValue(source, 'CCOSTO') ?? '').trim()
@@ -1457,7 +1459,7 @@ function App() {
             if (shouldUseHealthInsurance) {
               const rawHealthValue = healthInsuranceDocCandidates.map(key => healthInsuranceMap.get(key)).find(value => value !== undefined) ?? null
               if (rawHealthValue !== null) {
-                healthInsuranceValue = rawHealthValue * (exchangeRateValue || 0)
+                healthInsuranceValue = rawHealthValue * (rowExchangeRate || 0)
               }
             }
             if (shouldUseHealthInsurance) {
@@ -1505,6 +1507,7 @@ function App() {
             setByHeader(row, fieldNames.x100, x100 || null)
             setByHeader(row, fieldNames.x200, x200 || null)
             setByHeader(row, fieldNames.thirteenthMonth, thirteenthMonth || null)
+            setByHeader(row, fieldNames.expensesReimbursement, expensesReimbursement || null)
             if (paymentsStartCol && paymentsEndCol && localHeaderToCol[fieldNames.payments.toUpperCase()]) {
               row.getCell(localHeaderToCol[fieldNames.payments.toUpperCase()]).value = {
                 formula: `SUM(${colLetter(paymentsStartCol)}${rowNumber}:${colLetter(paymentsEndCol)}${rowNumber})`,
