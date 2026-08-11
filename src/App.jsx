@@ -1027,6 +1027,7 @@ function App() {
           'X200 - APORTE INS EMPLEADOR': ['X200 - APORTE INS EMPLEADOR'],
           '13TH MONTH (AGUINALDO)': ['PROVISION AGUINALDO', 'G013 - AGUINALDO'],
           'EXPENSES REIMBURSEMENT': ['X300 - EXPENSES'],
+          'Food allowance': ['A029 - AUXILIO ALIMENTACION'],
         }
 
         const reportRows = []
@@ -1435,6 +1436,7 @@ function App() {
             const x200 = extractConcept(source, crConceptMap['X200 - APORTE INS EMPLEADOR'])
             const thirteenthMonth = extractConcept(source, crConceptMap['13TH MONTH (AGUINALDO)'])
             const expensesReimbursement = extractConcept(source, crConceptMap['EXPENSES REIMBURSEMENT'])
+            const foodAllowance = extractConcept(source, crConceptMap['Food allowance'])
 
             const clientName = String(getCrValue(source, 'DESC.CCOSTO') ?? '').trim()
             const clientId = String(getCrValue(source, 'CCOSTO') ?? '').trim()
@@ -1501,6 +1503,7 @@ function App() {
             setByHeader(row, fieldNames.transportAllowance, allowanceTransport || null)
             setByHeader(row, fieldNames.allowance2, allowance2 || null)
             setByHeader(row, fieldNames.bonus, bonus || null)
+            setByHeader(row, fieldNames.foodAllowance, foodAllowance || null)
             setByHeader(row, fieldNames.allowance4, allowance4 || null)
             setByHeader(row, fieldNames.overtime, overtime || null)
             setByHeader(row, fieldNames.holidays, holidays || null)
