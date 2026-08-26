@@ -2879,9 +2879,7 @@ function App() {
             let feeFormula
             const esPorcentaje = cfg.fee.endsWith('%')
             if (esPorcentaje && pcTotalEmpCost !== -1 && pcFee !== pcTotalEmpCost) {
-              feeFormula = cfg.banking && pcBanking !== -1 && pcBanking !== pcFee
-                ? `${cfg.fee}*(${L(pcTotalEmpCost)}${rowNum}+${L(pcBanking)}${rowNum})`
-                : `${cfg.fee}*${L(pcTotalEmpCost)}${rowNum}`
+              feeFormula = `${cfg.fee}*${L(pcTotalEmpCost)}${rowNum}`
             } else if (cliente === 'C1055 - RIVERMATE') {
               const tasaEurNum = parseFloat(tasaCambioEur.replace(/,/g, '.'))
               feeFormula = `${cfg.fee}*${isNaN(tasaEurNum) ? 1 : tasaEurNum}`
