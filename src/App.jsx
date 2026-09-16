@@ -218,6 +218,7 @@ function App() {
   const [consecutivo, setConsecutivo] = useState('')
   const [clientesEOR, setClientesEOR] = useState([])
   const [clienteSeleccionadoEOR, setClienteSeleccionadoEOR] = useState('')
+  const [centroCosto, setCentroCosto] = useState('')
   const inputBase = useRef(null)
   const inputNova = useRef(null)
   const inputHealth = useRef(null)
@@ -3221,16 +3222,25 @@ function App() {
       return
     }
 
+    // Validar centro de costo si el cliente es Hemmersbach
+    if (clienteSeleccionadoEOR !== '') {
+      const clienteActual = clientesEOR[parseInt(clienteSeleccionadoEOR)]
+      if (clienteActual?.nombreTercero?.includes('HEMMERSBACH') && !centroCosto.trim()) {
+        setErrorProforma('Ingresa el centro de costo para Hemmersbach.')
+        return
+      }
+    }
+
     if (!archivoFacturacion) {
       setErrorProforma('Sube el archivo de facturación.')
       return
     }
 
     setGenerandoProforma(true)
-    try {
-      const buffer = await archivoFacturacion.arrayBuffer()
-      const workbook = new ExcelJS.Workbook()
-      await workbook.xlsx.load(buffer)
+
+    const buffer = await archivoFacturacion.arrayBuffer()
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(buffer)
 
       // Usar hoja "Invoicing" si existe, si no, la primera
       const worksheet = workbook.getWorksheet('Invoicing') || workbook.worksheets[0]
@@ -3265,12 +3275,22 @@ function App() {
       const clienteData = clientesEOR[parseInt(clienteSeleccionadoEOR)]
       const nombreCliente = clienteData?.nombreTercero || ''
       let pdfPath = '/Proforma Colombia blanco.pdf'
-      
-      if (nombreCliente.includes('EPDM') || nombreCliente.includes('RIVERMATE')) {
+      let usarHemmersbach = false
+      let usarOncehub = false
+
+      if (nombreCliente.includes('ONCEHUB')) {
+        pdfPath = '/Proforma Oncehub.pdf'
+        usarOncehub = true
+      } else if (nombreCliente.includes('HEMMERSBACH')) {
+        pdfPath = '/Proforma HEMMERSBACH.pdf'
+        usarHemmersbach = true
+      } else if (nombreCliente.includes('EPDM') || nombreCliente.includes('RIVERMATE')) {
         pdfPath = '/Proforma Moneda COP.pdf'
       } else if (nombreCliente.includes('EUROPORTAGE')) {
         pdfPath = '/Proforma Descuentos.pdf'
       }
+
+      const colEmpCode = headerMap['EMPLOYEE CODE']
 
       const colExchangeRate = headerMap['EXCHANGE RATE']
       // Solo validar Exchange Rate si no es Proforma Moneda COP
@@ -3381,6 +3401,19 @@ function App() {
           return Function('"use strict"; return (' + expr + ')')()
         } catch {
           return 0
+        }
+      }
+
+      // Para ONCEHUB: leer filas de empleados individuales (con EMPLOYEE CODE)
+      let filasEmpleadosOncehub = []
+      if (usarOncehub && colEmpCode) {
+        for (let rowNum = 4; rowNum <= worksheet.rowCount; rowNum++) {
+          const cellValue = getCellValue(rowNum, colEmpCode)
+          if (cellValue !== null && cellValue !== undefined && cellValue !== '' && cellValue !== 0) {
+            const totalEmpCostUsd = getCellValue(rowNum, colTotalEmpCostUsd)
+            const feeUsd = colFeeUsd ? getCellValue(rowNum, colFeeUsd) : 0
+            filasEmpleadosOncehub.push({ totalEmpCostUsd, feeUsd, rowNum })
+          }
         }
       }
 
@@ -3607,6 +3640,65 @@ function App() {
       const xCantidad_2_descuentos = firstPage.getWidth() - cantidadWidth - 282
       const yCantidad_2_descuentos = firstPage.getHeight() - 244
 
+      // Variables independientes para Hemmersbach (segundo grupo - afecta IVA)
+      const xCantidadHemmersbach_2 = firstPage.getWidth() - cantidadWidth - 282
+      const yCantidadHemmersbach_2 = firstPage.getHeight() - 268
+      const xVrUnitarioHemmersbach_2 = firstPage.getWidth() - feeUsdDividedWidth - 222
+      const yVrUnitarioHemmersbach_2 = firstPage.getHeight() - 268
+      const xVrBrutoHemmersbach_2 = firstPage.getWidth() - feeUsdDividedWidth - 144
+      const yVrBrutoHemmersbach_2 = firstPage.getHeight() - 268
+      const xVrTotalHemmersbach_2 = firstPage.getWidth() - feeUsdWidth - 66
+      const yVrTotalHemmersbach_2 = firstPage.getHeight() - 268
+      const xCantidadHemmersbach = firstPage.getWidth() - cantidadWidth - 282
+      const yCantidadHemmersbach = firstPage.getHeight() - 232
+      const xVrUnitarioHemmersbach = firstPage.getWidth() - feeUsdDividedWidth - 222
+      const yVrUnitarioHemmersbach = firstPage.getHeight() - 232
+      const xVrBrutoHemmersbach = firstPage.getWidth() - feeUsdDividedWidth - 144
+      const yVrBrutoHemmersbach = firstPage.getHeight() - 232
+      const xVrTotalHemmersbach = firstPage.getWidth() - textWidth - 66
+      const yVrTotalHemmersbach = firstPage.getHeight() - 232
+
+      // Variables para el tercer paquete (ONCEHUB - filas de empleados individuales)
+      // Paquete 3 - Empleado 1
+      const xCantidadOncehub1 = 300
+      const yCantidadOncehub1 = firstPage.getHeight() - 232
+      const xVrUnitarioOncehub1 = 360
+      const yVrUnitarioOncehub1 = firstPage.getHeight() - 232
+      const xVrBrutoOncehub1 = 440
+      const yVrBrutoOncehub1 = firstPage.getHeight() - 232
+      const xVrTotalOncehub1 = 500
+      const yVrTotalOncehub1 = firstPage.getHeight() - 232
+
+      // Segundo grupo (afecta IVA) - Paquete 3 (Empleado 1)
+      const xCantidadOncehub1_2 = 300
+      const yCantidadOncehub1_2 = firstPage.getHeight() - 256
+      const xVrUnitarioOncehub1_2 = 360
+      const yVrUnitarioOncehub1_2 = firstPage.getHeight() - 256
+      const xVrBrutoOncehub1_2 = 400
+      const yVrBrutoOncehub1_2 = firstPage.getHeight() - 256
+      const xVrTotalOncehub1_2 = 430
+      const yVrTotalOncehub1_2 = firstPage.getHeight() - 256
+
+      // Segundo grupo (afecta IVA) - Paquete 4 (Empleado 2)
+      const xCantidadOncehub2_2 = 300
+      const yCantidadOncehub2_2 = firstPage.getHeight() - 300
+      const xVrUnitarioOncehub2_2 = 360
+      const yVrUnitarioOncehub2_2 = firstPage.getHeight() - 300
+      const xVrBrutoOncehub2_2 = 440
+      const yVrBrutoOncehub2_2 = firstPage.getHeight() - 300
+      const xVrTotalOncehub2_2 = 500
+      const yVrTotalOncehub2_2 = firstPage.getHeight() - 300
+
+      // Paquete 4 - Empleado 2
+      const xCantidadOncehub2 = 300
+      const yCantidadOncehub2 = firstPage.getHeight() - 270
+      const xVrUnitarioOncehub2 = 360
+      const yVrUnitarioOncehub2 = firstPage.getHeight() - 270
+      const xVrBrutoOncehub2 = 440
+      const yVrBrutoOncehub2 = firstPage.getHeight() - 270
+      const xVrTotalOncehub2 = 500
+      const yVrTotalOncehub2 = firstPage.getHeight() - 270
+
       const xTasaCambio_descuentos = firstPage.getWidth() - exchangeRateWidth - 60
       const yTasaCambio_descuentos = firstPage.getHeight() - 182
       const xTasaCambio_2_descuentos = firstPage.getWidth() - exchangeRateWidth - 480
@@ -3656,6 +3748,13 @@ function App() {
       const nombreClienteConMes2 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
       const nombreClienteConMes3 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
       const nombreClienteConMes4 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
+
+      // Hemmersbach: formato "HEMMERSBACH - {centroCosto} {Mes}"
+      const nombreHemmersbach1 = `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEn}`
+      const nombreHemmersbach2Linea1 = `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto}`
+      const nombreHemmersbach2Linea2 = mesActualEs
+      const nombreHemmersbach3 = `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEn}`
+      const nombreHemmersbach4 = `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEs}`
       const xNombreCliente3_descuentos = 65
       const yNombreCliente3_descuentos = firstPage.getHeight() - 633
       const xMoneda_descuentos = 74
@@ -3689,64 +3788,64 @@ function App() {
       const yVrTotalDescuento = firstPage.getHeight() - 267
 
       firstPage.drawText('1.00', {
-        x: usarDescuentos ? xCantidad_descuentos : xCantidad,
-        y: usarDescuentos ? yCantidad_descuentos : y,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xCantidadHemmersbach : (usarDescuentos ? xCantidad_descuentos : xCantidad)),
+        y: usarOncehub ? 0 : (usarHemmersbach ? yCantidadHemmersbach : (usarDescuentos ? yCantidad_descuentos : y)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
       firstPage.drawText(formattedValue, {
-        x: usarDescuentos ? xVrUnitario_descuentos : xVrUnitario,
-        y: usarDescuentos ? yVrUnitario_descuentos : y,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xVrUnitarioHemmersbach : (usarDescuentos ? xVrUnitario_descuentos : xVrUnitario)),
+        y: usarOncehub ? 0 : (usarHemmersbach ? yVrUnitarioHemmersbach : (usarDescuentos ? yVrUnitario_descuentos : y)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
       firstPage.drawText(formattedValue, {
-        x: usarDescuentos ? xVrBruto_descuentos : xVrBruto,
-        y: usarDescuentos ? yVrBruto_descuentos : y,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xVrBrutoHemmersbach : (usarDescuentos ? xVrBruto_descuentos : xVrBruto)),
+        y: usarOncehub ? 0 : (usarHemmersbach ? yVrBrutoHemmersbach : (usarDescuentos ? yVrBruto_descuentos : y)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
       firstPage.drawText(formattedValue, {
-        x: usarDescuentos ? xVrTotal_descuentos : xVrTotal,
-        y: usarDescuentos ? yVrTotal_descuentos : y,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xVrTotalHemmersbach : (usarDescuentos ? xVrTotal_descuentos : xVrTotal)),
+        y: usarOncehub ? 0 : (usarHemmersbach ? yVrTotalHemmersbach : (usarDescuentos ? yVrTotal_descuentos : y)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
       firstPage.drawText(formattedFeeUsd, {
-        x: usarDescuentos ? xVrTotal_2_descuentos : xVrTotal_2,
-        y: usarDescuentos ? yVrTotal_2_descuentos : y_2,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xVrTotalHemmersbach_2 : (usarDescuentos ? xVrTotal_2_descuentos : xVrTotal_2)),
+        y: usarOncehub ? 0 : (usarHemmersbach ? yVrTotalHemmersbach_2 : (usarDescuentos ? yVrTotal_2_descuentos : y_2)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
       firstPage.drawText(formattedFeeUsdDivided, {
-        x: usarDescuentos ? xVrUnitario_2_descuentos : xVrUnitario_2,
-        y: usarDescuentos ? yVrUnitario_2_descuentos : y_2,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xVrUnitarioHemmersbach_2 : (usarDescuentos ? xVrUnitario_2_descuentos : xVrUnitario_2)),
+        y: usarOncehub ? 0 : (usarHemmersbach ? yVrUnitarioHemmersbach_2 : (usarDescuentos ? yVrUnitario_2_descuentos : y_2)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
       firstPage.drawText(formattedFeeUsdDivided, {
-        x: usarDescuentos ? xVrBruto_2_descuentos : xVrBruto_2,
-        y: usarDescuentos ? yVrBruto_2_descuentos : y_2,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xVrBrutoHemmersbach_2 : (usarDescuentos ? xVrBruto_2_descuentos : xVrBruto_2)),
+        y: usarHemmersbach ? yVrBrutoHemmersbach_2 : (usarDescuentos ? yVrBruto_2_descuentos : y_2),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
       firstPage.drawText('1.00', {
-        x: usarDescuentos ? xCantidad_2_descuentos : xCantidad_2,
-        y: usarDescuentos ? yCantidad_2_descuentos : y_2,
+        x: usarOncehub ? 0 : (usarHemmersbach ? xCantidadHemmersbach_2 : (usarDescuentos ? xCantidad_2_descuentos : xCantidad_2)),
+        y: usarHemmersbach ? yCantidadHemmersbach_2 : (usarDescuentos ? yCantidad_2_descuentos : y_2),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
@@ -3769,6 +3868,69 @@ function App() {
           font,
           color: rgb(0, 0, 0),
         })
+      }
+
+      // ONCEHUB: Dibujar paquetes de empleados individuales
+      if (usarOncehub && filasEmpleadosOncehub.length > 0) {
+        // Paquete 3 - Empleado 1
+        if (filasEmpleadosOncehub[0]) {
+          const emp1 = filasEmpleadosOncehub[0]
+          const lastValue1 = emp1.totalEmpCostUsd
+          const lastFeeUsd1 = emp1.feeUsd
+          const feeUsdDivided1 = lastFeeUsd1 / 1.19
+          const formattedValue1 = lastValue1.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          const formattedFeeUsd1 = lastFeeUsd1.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          const formattedFeeUsdDivided1 = feeUsdDivided1.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+          firstPage.drawText('1.00', { x: xCantidadOncehub1, y: yCantidadOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedValue1, { x: xVrUnitarioOncehub1, y: yVrUnitarioOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedValue1, { x: xVrBrutoOncehub1, y: yVrBrutoOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedValue1, { x: xVrTotalOncehub1, y: yVrTotalOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
+
+          // Segundo grupo (afecta IVA) - Empleado 1
+          firstPage.drawText('1.00', { x: xCantidadOncehub1_2, y: yCantidadOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedFeeUsdDivided1, { x: xVrUnitarioOncehub1_2, y: yVrUnitarioOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedFeeUsdDivided1, { x: xVrBrutoOncehub1_2, y: yVrBrutoOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedFeeUsd1, { x: xVrTotalOncehub1_2, y: yVrTotalOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
+
+          // 4 instancias de nombres empleado 1
+          const nombreMesEn1 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+          const nombreMesEs1 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
+          firstPage.drawText(nombreMesEn1, { x: 135, y: firstPage.getHeight() - 259, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs1, { x: 175, y: firstPage.getHeight() - 271, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn1, { x: 108, y: firstPage.getHeight() - 283.6, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs1, { x: 154, y: firstPage.getHeight() - 295, size: 6, font, color: rgb(0, 0, 0) })
+        }
+
+        // Paquete 4 - Empleado 2
+        if (filasEmpleadosOncehub[1]) {
+          const emp2 = filasEmpleadosOncehub[1]
+          const lastValue2 = emp2.totalEmpCostUsd
+          const lastFeeUsd2 = emp2.feeUsd
+          const feeUsdDivided2 = lastFeeUsd2 / 1.19
+          const formattedValue2 = lastValue2.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          const formattedFeeUsd2 = lastFeeUsd2.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          const formattedFeeUsdDivided2 = feeUsdDivided2.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+          firstPage.drawText('1.00', { x: xCantidadOncehub2, y: yCantidadOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedValue2, { x: xVrUnitarioOncehub2, y: yVrUnitarioOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedValue2, { x: xVrBrutoOncehub2, y: yVrBrutoOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedValue2, { x: xVrTotalOncehub2, y: yVrTotalOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
+
+          // Segundo grupo (afecta IVA) - Empleado 2
+          firstPage.drawText('1.00', { x: xCantidadOncehub2_2, y: yCantidadOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedFeeUsdDivided2, { x: xVrUnitarioOncehub2_2, y: yVrUnitarioOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedFeeUsdDivided2, { x: xVrBrutoOncehub2_2, y: yVrBrutoOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedFeeUsd2, { x: xVrTotalOncehub2_2, y: yVrTotalOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
+
+          // 4 instancias de nombres empleado 2
+          const nombreMesEn2 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+          const nombreMesEs2 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
+          firstPage.drawText(nombreMesEn2, { x: 135, y: firstPage.getHeight() - 289, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs2, { x: 175, y: firstPage.getHeight() - 301, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn2, { x: 108, y: firstPage.getHeight() - 313.6, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs2, { x: 154, y: firstPage.getHeight() - 325, size: 6, font, color: rgb(0, 0, 0) })
+        }
       }
 
       const xFecha = firstPage.getWidth() - fechaWidth - 145
@@ -3817,6 +3979,7 @@ function App() {
 
       // Agregar información del cliente seleccionado
       if (clienteSeleccionadoEOR !== '') {
+        console.log('DEBUG: usarOncehub =', usarOncehub, '| usarHemmersbach =', usarHemmersbach, '| nombreCliente =', nombreCliente)
         if (clienteData) {
           const clienteFontSize = 6
           
@@ -3856,41 +4019,112 @@ function App() {
           const xPais = 70
           const yPais = firstPage.getHeight() - 636
           
-          // Nombre cliente_2 - Instancia 1 (inglés)
-          firstPage.drawText(nombreClienteConMes1, {
-            x: usarDescuentos ? xNombreCliente2_1_descuentos : xNombreCliente2_1,
-            y: usarDescuentos ? yNombreCliente2_1_descuentos : yNombreCliente2_1,
-            size: clienteFontSize,
-            font,
-            color: rgb(0, 0, 0),
-          })
+          // Nombre cliente_2 - Instancias originales (NO para Hemmersbach ni ONCEHUB)
+          console.log('DEBUG INSTANCIAS: usarOncehub =', usarOncehub, '| usarHemmersbach =', usarHemmersbach, '| condicion =', (!usarHemmersbach && !usarOncehub))
+          if (!usarHemmersbach && !usarOncehub) {
+            // Instancia 1 (inglés)
+            firstPage.drawText(nombreClienteConMes1, {
+              x: usarDescuentos ? xNombreCliente2_1_descuentos : xNombreCliente2_1,
+              y: usarDescuentos ? yNombreCliente2_1_descuentos : yNombreCliente2_1,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
 
-          // Nombre cliente_2 - Instancia 2 (español)
-          firstPage.drawText(nombreClienteConMes2, {
-            x: usarDescuentos ? xNombreCliente2_2_descuentos : xNombreCliente2_2,
-            y: usarDescuentos ? yNombreCliente2_2_descuentos : yNombreCliente2_2,
-            size: clienteFontSize,
-            font,
-            color: rgb(0, 0, 0),
-          })
+            // Instancia 2 (español)
+            firstPage.drawText(nombreClienteConMes2, {
+              x: usarDescuentos ? xNombreCliente2_2_descuentos : xNombreCliente2_2,
+              y: usarDescuentos ? yNombreCliente2_2_descuentos : yNombreCliente2_2,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
 
-          // Nombre cliente_2 - Instancia 3 (inglés)
-          firstPage.drawText(nombreClienteConMes3, {
-            x: usarDescuentos ? xNombreCliente2_3_descuentos : xNombreCliente2_3,
-            y: usarDescuentos ? yNombreCliente2_3_descuentos : yNombreCliente2_3,
-            size: clienteFontSize,
-            font,
-            color: rgb(0, 0, 0),
-          })
+            // Instancia 3 (inglés)
+            firstPage.drawText(nombreClienteConMes3, {
+              x: usarDescuentos ? xNombreCliente2_3_descuentos : xNombreCliente2_3,
+              y: usarDescuentos ? yNombreCliente2_3_descuentos : yNombreCliente2_3,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
 
-          // Nombre cliente_2 - Instancia 4 (español)
-          firstPage.drawText(nombreClienteConMes4, {
-            x: usarDescuentos ? xNombreCliente2_4_descuentos : xNombreCliente2_4,
-            y: usarDescuentos ? yNombreCliente2_4_descuentos : yNombreCliente2_4,
-            size: clienteFontSize,
-            font,
-            color: rgb(0, 0, 0),
-          })
+            // Instancia 4 (español)
+            firstPage.drawText(nombreClienteConMes4, {
+              x: usarDescuentos ? xNombreCliente2_4_descuentos : xNombreCliente2_4,
+              y: usarDescuentos ? yNombreCliente2_4_descuentos : yNombreCliente2_4,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+          }
+
+          // Hemmersbach: 4 instancias con centro de costo (solo si ES Hemmersbach)
+          if (usarHemmersbach) {
+            // Posiciones independientes para Hemmersbach
+            const xHemmersbach1 = 135
+            const yHemmersbach1 = firstPage.getHeight() - 229
+            const xHemmersbach2 = 175
+            const yHemmersbach2 = firstPage.getHeight() - 241
+            const xHemmersbach2_mes1 = 63.4
+            const xHemmersbach3 = 108
+            const yHemmersbach3 = firstPage.getHeight() - 264.2
+            const xHemmersbach4 = 154
+            const yHemmersbach4 = firstPage.getHeight() - 276.6
+            const xHemmersbach4_mes1 = 63.4
+
+            // Instancia 1 (inglés): HEMMERSBACH - CC8862OC September
+            firstPage.drawText(nombreHemmersbach1, {
+              x: xHemmersbach1,
+              y: yHemmersbach1,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+
+            // Instancia 2 (español): HEMMERSBACH - CC8862OC / Septiembre (2 líneas)
+            firstPage.drawText(nombreHemmersbach2Linea1, {
+              x: xHemmersbach2,
+              y: yHemmersbach2,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+            firstPage.drawText(nombreHemmersbach2Linea2, {
+              x: xHemmersbach2_mes1,
+              y: yHemmersbach2 - 10,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+
+            // Instancia 3 (inglés): HEMMERSBACH - CC8862OC September
+            firstPage.drawText(nombreHemmersbach3, {
+              x: xHemmersbach3,
+              y: yHemmersbach3,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+
+            // Instancia 4 (español): HEMMERSBACH - CC8862OC / Septiembre (2 líneas)
+            firstPage.drawText(`${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto}`, {
+              x: xHemmersbach4,
+              y: yHemmersbach4,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+            firstPage.drawText(mesActualEs, {
+              x: xHemmersbach4_mes1,
+              y: yHemmersbach4 - 10,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+          }
+
+          // Campos de cliente
 
           // Nombre cliente_3 (solo valor de columna J sin mes)
           firstPage.drawText(clienteData.nombreClienteFinal || '', {
@@ -3979,7 +4213,6 @@ function App() {
             color: rgb(0, 0, 0),
           })
         }
-      }
 
       firstPage.drawText(formattedTotalBruto, {
         x: usarDescuentos ? xTotalBruto_descuentos : xTotalBruto,
@@ -4070,6 +4303,24 @@ function App() {
         })
       }
 
+      // Dibujar rectángulos temporales para tapar valores erróneos (solo ONCEHUB)
+      if (usarOncehub) {
+        firstPage.drawRectangle({
+          x: 0,
+          y: 0,
+          width: 40,
+          height: 20,
+          color: rgb(1, 1, 1),
+        })
+        firstPage.drawRectangle({
+          x: 0,
+          y: 520,
+          width: 20,
+          height: 40,
+          color: rgb(1, 1, 1),
+        })
+      }
+
       const pdfBytes = await pdfDoc.save()
       const blob = new Blob([pdfBytes], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
@@ -4081,9 +4332,22 @@ function App() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
+      // Dibujar rectángulo ROJO temporal para ubicar zona
+      console.log('DEBUG: Dibujando rectángulo rojo, usarOncehub =', usarOncehub)
+      firstPage.drawRectangle({
+        x: 50,
+        y: 50,
+        width: 200,
+        height: 100,
+        color: rgb(1, 0, 0),
+        borderColor: rgb(0, 0, 0),
+        borderWidth: 2,
+      })
+
       setExitoProforma(true)
       setTimeout(() => setExitoProforma(false), 5000)
 
+      // Actualizar consecutivo después de generar la proforma
       const nuevoConsecutivo = parseInt(consecutivo) + 1
       try {
         await sql`
@@ -4095,12 +4359,21 @@ function App() {
       } catch (err) {
         console.error('Error al actualizar consecutivo:', err)
       }
-    } catch (err) {
-      setErrorProforma(err.message)
-    } finally {
+    }
+      const nuevoConsecutivo = parseInt(consecutivo) + 1
+      try {
+        await sql`
+          UPDATE proformas_config 
+          SET consecutivo = ${nuevoConsecutivo}, updated_at = CURRENT_TIMESTAMP
+          WHERE id = (SELECT id FROM proformas_config ORDER BY id DESC LIMIT 1)
+        `
+        setConsecutivo(String(nuevoConsecutivo))
+      } catch (err) {
+        console.error('Error al actualizar consecutivo:', err)
+      }
+
       setGenerandoProforma(false)
     }
-  }
 
   const enviarNotificacion = async () => {
     setErrorNotificacion(null)
@@ -4943,6 +5216,32 @@ function App() {
                     ))}
                   </select>
                 </div>
+
+                {clienteSeleccionadoEOR !== '' && clientesEOR[parseInt(clienteSeleccionadoEOR)]?.nombreTercero?.includes('HEMMERSBACH') && (
+                  <div className="form-group">
+                    <label className="label">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      </svg>
+                      Centro de Costo
+                    </label>
+                    <input
+                      type="text"
+                      className="select-input"
+                      list="centroCostoOptions"
+                      placeholder="Scciona o escribe..."
+                      value={centroCosto}
+                      onChange={(e) => setCentroCosto(e.target.value)}
+                    />
+                    <datalist id="centroCostoOptions">
+                      <option value="CC5742OC" />
+                      <option value="CC7072OC" />
+                      <option value="CC8822OC" />
+                      <option value="CC8832OC" />
+                      <option value="CC8862OC" />
+                    </datalist>
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="label">
