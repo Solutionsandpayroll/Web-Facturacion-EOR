@@ -3407,12 +3407,15 @@ function App() {
       // Para ONCEHUB: leer filas de empleados individuales (con EMPLOYEE CODE)
       let filasEmpleadosOncehub = []
       if (usarOncehub && colEmpCode) {
+        const colVAT = headerMap['VAT']
         for (let rowNum = 4; rowNum <= worksheet.rowCount; rowNum++) {
           const cellValue = getCellValue(rowNum, colEmpCode)
           if (cellValue !== null && cellValue !== undefined && cellValue !== '' && cellValue !== 0) {
             const totalEmpCostUsd = getCellValue(rowNum, colTotalEmpCostUsd)
             const feeUsd = colFeeUsd ? getCellValue(rowNum, colFeeUsd) : 0
-            filasEmpleadosOncehub.push({ totalEmpCostUsd, feeUsd, rowNum })
+            const vat = colVAT ? getCellValue(rowNum, colVAT) : 0
+            const employeeCode = cellValue
+            filasEmpleadosOncehub.push({ totalEmpCostUsd, feeUsd, vat, employeeCode, rowNum })
           }
         }
       }
@@ -3870,6 +3873,12 @@ function App() {
         })
       }
 
+      // Mapa de EMPLOYEE CODE a nombres para ONCEHUB
+      const nombresEmpleados = {
+        '1055313601': 'Maria del Mar Alba',
+        '1020783516': 'Daniela Restrepo',
+      }
+
       // ONCEHUB: Dibujar paquetes de empleados individuales
       if (usarOncehub && filasEmpleadosOncehub.length > 0) {
         // Paquete 3 - Empleado 1
@@ -3877,10 +3886,13 @@ function App() {
           const emp1 = filasEmpleadosOncehub[0]
           const lastValue1 = emp1.totalEmpCostUsd
           const lastFeeUsd1 = emp1.feeUsd
-          const feeUsdDivided1 = lastFeeUsd1 / 1.19
+          const lastVat1 = emp1.vat || 0
+          const totalConVat1 = lastFeeUsd1 + lastVat1
+          const feeUsdDivided1 = totalConVat1 / 1.19
           const formattedValue1 = lastValue1.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           const formattedFeeUsd1 = lastFeeUsd1.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           const formattedFeeUsdDivided1 = feeUsdDivided1.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          const formattedTotal1 = (lastFeeUsd1 + lastVat1).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
           firstPage.drawText('1.00', { x: xCantidadOncehub1, y: yCantidadOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
           firstPage.drawText(formattedValue1, { x: xVrUnitarioOncehub1, y: yVrUnitarioOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
@@ -3891,15 +3903,16 @@ function App() {
           firstPage.drawText('1.00', { x: xCantidadOncehub1_2, y: yCantidadOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
           firstPage.drawText(formattedFeeUsdDivided1, { x: xVrUnitarioOncehub1_2, y: yVrUnitarioOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
           firstPage.drawText(formattedFeeUsdDivided1, { x: xVrBrutoOncehub1_2, y: yVrBrutoOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedFeeUsd1, { x: xVrTotalOncehub1_2, y: yVrTotalOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedTotal1, { x: xVrTotalOncehub1_2, y: yVrTotalOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
 
           // 4 instancias de nombres empleado 1
-          const nombreMesEn1 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+          const nombreEmp1 = nombresEmpleados[String(emp1.employeeCode)] || clienteData.nombreClienteFinal
+          const nombreMesEn1 = `${clienteData.nombreClienteFinal.toUpperCase()}- (${mesActualEn}) - ${nombreEmp1}`
           const nombreMesEs1 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
-          firstPage.drawText(nombreMesEn1, { x: 135, y: firstPage.getHeight() - 259, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs1, { x: 175, y: firstPage.getHeight() - 271, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEn1, { x: 108, y: firstPage.getHeight() - 283.6, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs1, { x: 154, y: firstPage.getHeight() - 295, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn1, { x: 135, y: firstPage.getHeight() - 224, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs1, { x: 175, y: firstPage.getHeight() - 234.6, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn1, { x: 108, y: firstPage.getHeight() - 246, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs1, { x: 154, y: firstPage.getHeight() - 257.3, size: 6, font, color: rgb(0, 0, 0) })
         }
 
         // Paquete 4 - Empleado 2
@@ -3907,10 +3920,13 @@ function App() {
           const emp2 = filasEmpleadosOncehub[1]
           const lastValue2 = emp2.totalEmpCostUsd
           const lastFeeUsd2 = emp2.feeUsd
-          const feeUsdDivided2 = lastFeeUsd2 / 1.19
+          const lastVat2 = emp2.vat || 0
+          const totalConVat2 = lastFeeUsd2 + lastVat2
+          const feeUsdDivided2 = totalConVat2 / 1.19
           const formattedValue2 = lastValue2.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           const formattedFeeUsd2 = lastFeeUsd2.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           const formattedFeeUsdDivided2 = feeUsdDivided2.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          const formattedTotal2 = (lastFeeUsd2 + lastVat2).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
           firstPage.drawText('1.00', { x: xCantidadOncehub2, y: yCantidadOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
           firstPage.drawText(formattedValue2, { x: xVrUnitarioOncehub2, y: yVrUnitarioOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
@@ -3921,15 +3937,16 @@ function App() {
           firstPage.drawText('1.00', { x: xCantidadOncehub2_2, y: yCantidadOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
           firstPage.drawText(formattedFeeUsdDivided2, { x: xVrUnitarioOncehub2_2, y: yVrUnitarioOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
           firstPage.drawText(formattedFeeUsdDivided2, { x: xVrBrutoOncehub2_2, y: yVrBrutoOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedFeeUsd2, { x: xVrTotalOncehub2_2, y: yVrTotalOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(formattedTotal2, { x: xVrTotalOncehub2_2, y: yVrTotalOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
 
           // 4 instancias de nombres empleado 2
-          const nombreMesEn2 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+          const nombreEmp2 = nombresEmpleados[String(emp2.employeeCode)] || clienteData.nombreClienteFinal
+          const nombreMesEn2 = `${clienteData.nombreClienteFinal.toUpperCase()}- (${mesActualEn}) - ${nombreEmp2}`
           const nombreMesEs2 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
-          firstPage.drawText(nombreMesEn2, { x: 135, y: firstPage.getHeight() - 289, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs2, { x: 175, y: firstPage.getHeight() - 301, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEn2, { x: 108, y: firstPage.getHeight() - 313.6, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs2, { x: 154, y: firstPage.getHeight() - 325, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn2, { x: 135, y: firstPage.getHeight() - 269, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs2, { x: 175, y: firstPage.getHeight() - 280, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn2, { x: 108, y: firstPage.getHeight() - 291.7, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEs2, { x: 154, y: firstPage.getHeight() - 303, size: 6, font, color: rgb(0, 0, 0) })
         }
       }
 
@@ -4318,8 +4335,11 @@ function App() {
           width: 20,
           height: 40,
           color: rgb(1, 1, 1),
+
         })
       }
+
+      // Función para generar texto de nombre con formato ONCEHUB- (Mes) - Nombre
 
       const pdfBytes = await pdfDoc.save()
       const blob = new Blob([pdfBytes], { type: 'application/pdf' })
