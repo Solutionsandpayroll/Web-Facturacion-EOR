@@ -6,13 +6,21 @@
   "description": "Sistema de Facturación EOR - Solutions & Payroll",
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js",
+    "dev:api": "node server.js",
+    "dev:all": "start /b node server.js && node node_modules/vite/bin/vite.js",
     "build": "node node_modules/vite/bin/vite.js build",
     "preview": "node node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "jszip": "^3.10.1",
+    "multer": "^2.3.0",
+    "nodemailer": "^9.1.1",
+    "pdf-lib": "^1.17.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "xlsx": "^0.18.5"

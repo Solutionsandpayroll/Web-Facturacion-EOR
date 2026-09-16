@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { neon } from '@neondatabase/serverless'
 import './App.css'
 
@@ -204,10 +205,24 @@ function App() {
   const [reporteValoresHealth, setReporteValoresHealth] = useState(null)
   const [dragHealth, setDragHealth] = useState(false)
   const [dragCodes, setDragCodes] = useState(false)
+  const [archivoFacturacion, setArchivoFacturacion] = useState(null)
+  const [dragFacturacion, setDragFacturacion] = useState(false)
+  const [generandoProforma, setGenerandoProforma] = useState(false)
+  const [errorProforma, setErrorProforma] = useState(null)
+  const [exitoProforma, setExitoProforma] = useState(false)
+  const [enviandoNotificacion, setEnviandoNotificacion] = useState(false)
+  const [errorNotificacion, setErrorNotificacion] = useState(null)
+  const [exitoNotificacion, setExitoNotificacion] = useState(false)
+  const [fechaElaboracion, setFechaElaboracion] = useState('')
+  const [fechaVencimiento, setFechaVencimiento] = useState('')
+  const [consecutivo, setConsecutivo] = useState('')
+  const [clientesEOR, setClientesEOR] = useState([])
+  const [clienteSeleccionadoEOR, setClienteSeleccionadoEOR] = useState('')
   const inputBase = useRef(null)
   const inputNova = useRef(null)
   const inputHealth = useRef(null)
   const inputCodes = useRef(null)
+  const inputFacturacion = useRef(null)
   const [clientesSeleccionados, setClientesSeleccionados] = useState([])
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [busqueda, setBusqueda] = useState('')
@@ -347,6 +362,79 @@ function App() {
   }, [activeProcess])
 
   useEffect(() => { loadConfig() }, [loadConfig])
+
+  useEffect(() => {
+    const loadConsecutivo = async () => {
+      try {
+        const rows = await sql`
+          SELECT consecutivo FROM proformas_config ORDER BY id DESC LIMIT 1
+        `
+        if (rows.length > 0) {
+          setConsecutivo(String(rows[0].consecutivo))
+        } else {
+          setConsecutivo('1')
+        }
+      } catch (err) {
+        console.error('Error al cargar consecutivo:', err)
+        setConsecutivo('1')
+      }
+    }
+    loadConsecutivo()
+  }, [])
+
+  useEffect(() => {
+    if (!fechaElaboracion) {
+      setFechaVencimiento('')
+      return
+    }
+    const [yyyy, mm, dd] = fechaElaboracion.split('-').map(Number)
+    const fecha = new Date(yyyy, mm - 1, dd)
+    const dia = fecha.getDate()
+    let fechaVenc
+    if (dia < 20) {
+      fechaVenc = new Date(yyyy, mm - 1, 20)
+    } else {
+      fechaVenc = new Date(yyyy, mm - 1, dd)
+      fechaVenc.setDate(fechaVenc.getDate() + 1)
+    }
+    const yyyy2 = fechaVenc.getFullYear()
+    const mm2 = String(fechaVenc.getMonth() + 1).padStart(2, '0')
+    const dd2 = String(fechaVenc.getDate()).padStart(2, '0')
+    setFechaVencimiento(`${yyyy2}-${mm2}-${dd2}`)
+  }, [fechaElaboracion])
+
+  useEffect(() => {
+    const loadClientesEOR = async () => {
+      try {
+        const response = await fetch('/Clientes EOR.xlsx')
+        const arrayBuffer = await response.arrayBuffer()
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' })
+        const sheetName = workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
+        const data = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+        
+        const clientes = []
+        for (let i = 1; i < data.length; i++) {
+          const row = data[i]
+          if (row && row[1]) {
+            clientes.push({
+              nombreTercero: row[1] || '',
+              identificacion: row[2] || '',
+              direccion: row[3] || '',
+              ciudad: row[4] || '',
+              telefono: row[5] || '',
+              monedaFacturacion: row[6] || '',
+              nombreClienteFinal: row[9] || '',
+            })
+          }
+        }
+        setClientesEOR(clientes)
+      } catch (err) {
+        console.error('Error al cargar clientes EOR:', err)
+      }
+    }
+    loadClientesEOR()
+  }, [])
 
   const loadRemoSubclientes = useCallback(async () => {
     if (activeProcess !== 'costa-rica') {
@@ -3033,6 +3121,1020 @@ function App() {
     }
   }
 
+  const numberToWords = (num, currency = 'USD') => {
+    const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+    const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve']
+    const tens = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
+    const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+
+    const convertHundreds = (n) => {
+      if (n === 0) return ''
+      if (n === 100) return 'cien'
+      
+      let result = ''
+      if (n >= 100) {
+        result += hundreds[Math.floor(n / 100)] + ' '
+        n %= 100
+      }
+      
+      if (n >= 10 && n <= 19) {
+        result += teens[n - 10]
+      } else if (n >= 20 && n <= 29) {
+        if (n === 20) {
+          result += 'veinte'
+        } else {
+          result += 'veinti' + units[n - 20]
+        }
+      } else if (n >= 10 && n <= 99) {
+        result += tens[Math.floor(n / 10)]
+        if (n % 10 > 0) {
+          result += ' y ' + units[n % 10]
+        }
+      } else if (n < 10) {
+        result += units[n]
+      }
+      
+      return result.trim()
+    }
+
+    const intPart = Math.floor(num)
+    const decPart = Math.round((num - intPart) * 100)
+
+    let words = ''
+    
+    if (intPart === 0) {
+      words = 'cero'
+    } else {
+      if (intPart >= 1000000) {
+        const millions = Math.floor(intPart / 1000000)
+        if (millions === 1) {
+          words += 'un millón '
+        } else {
+          words += convertHundreds(millions) + ' millones '
+        }
+      }
+      
+      const remainder = intPart % 1000000
+      if (remainder >= 1000) {
+        const thousands = Math.floor(remainder / 1000)
+        if (thousands === 1) {
+          words += 'mil '
+        } else {
+          words += convertHundreds(thousands) + ' mil '
+        }
+      }
+      
+      const hundredsPart = remainder % 1000
+      if (hundredsPart > 0) {
+        words += convertHundreds(hundredsPart)
+      }
+    }
+
+    words = words.trim()
+    const centsText = decPart > 0 ? convertHundreds(decPart) : 'cero'
+    
+    const currencyLabel = currency === 'COP' ? 'pesos m/cte' : 'Dólares Estadounidenses'
+    return `${words.charAt(0).toUpperCase() + words.slice(1)} ${currencyLabel} con ${centsText} cent.`
+  }
+
+  const generarProforma = async () => {
+    setErrorProforma(null)
+    setExitoProforma(false)
+
+    if (!consecutivo) {
+      setErrorProforma('Ingresa el número de consecutivo.')
+      return
+    }
+
+    if (clienteSeleccionadoEOR === '') {
+      setErrorProforma('Selecciona un cliente.')
+      return
+    }
+
+    if (!fechaElaboracion) {
+      setErrorProforma('Selecciona la fecha de elaboración.')
+      return
+    }
+
+    if (!fechaVencimiento) {
+      setErrorProforma('Selecciona la fecha de vencimiento.')
+      return
+    }
+
+    if (!archivoFacturacion) {
+      setErrorProforma('Sube el archivo de facturación.')
+      return
+    }
+
+    setGenerandoProforma(true)
+    try {
+      const buffer = await archivoFacturacion.arrayBuffer()
+      const workbook = new ExcelJS.Workbook()
+      await workbook.xlsx.load(buffer)
+
+      // Usar hoja "Invoicing" si existe, si no, la primera
+      const worksheet = workbook.getWorksheet('Invoicing') || workbook.worksheets[0]
+
+      // Leer con fórmulas evaluadas para obtener el valor de la celda de totales
+      const wbFormula = XLSX.read(buffer, { type: 'array', cellFormula: true })
+      // Usar hoja "Invoicing" si existe, si no, la primera
+      const invSheetName = wbFormula.SheetNames.includes('Invoicing') ? 'Invoicing' : wbFormula.SheetNames[0]
+      const wsFormula = wbFormula.Sheets[invSheetName]
+      const formulaData = XLSX.utils.sheet_to_json(wsFormula, { header: 1, raw: false, defval: '' })
+
+      // Construir headerMap usando formulaData (fila 3 = índice 2), mantener 1-based para compatibilidad
+      const headerMap = {}
+      const headersRow = formulaData[2] || []
+      headersRow.forEach((val, colIdx) => {
+        const header = String(val ?? '').trim().toUpperCase()
+        if (header) headerMap[header] = colIdx + 1  // 1-based
+      })
+
+      const colTotalEmpCostUsd = headerMap['TOTAL EMPLOYEE COST USD'] || headerMap['TOTAL EMPLOYEE COST']
+      if (!colTotalEmpCostUsd) {
+        throw new Error('No se encontró la columna "TOTAL EMPLOYEE COST USD" ni "TOTAL EMPLOYEE COST" en el archivo.')
+      }
+
+      const colFeeUsd = headerMap['FEE USD'] || headerMap['FEE']
+      if (!colFeeUsd) {
+        throw new Error('No se encontró la columna "FEE USD" ni "FEE" en el archivo.')
+      }
+
+      // Determinar el PDF según el cliente (movido aquí para validar Exchange Rate condicionalmente)
+      const invWorksheet = workbook.getWorksheet('Invoicing') || workbook.worksheets[0]
+      const clienteData = clientesEOR[parseInt(clienteSeleccionadoEOR)]
+      const nombreCliente = clienteData?.nombreTercero || ''
+      let pdfPath = '/Proforma Colombia blanco.pdf'
+      
+      if (nombreCliente.includes('EPDM') || nombreCliente.includes('RIVERMATE')) {
+        pdfPath = '/Proforma Moneda COP.pdf'
+      } else if (nombreCliente.includes('EUROPORTAGE')) {
+        pdfPath = '/Proforma Descuentos.pdf'
+      }
+
+      const colExchangeRate = headerMap['EXCHANGE RATE']
+      // Solo validar Exchange Rate si no es Proforma Moneda COP
+      if (!colExchangeRate && pdfPath !== '/Proforma Moneda COP.pdf') {
+        throw new Error('No se encontró la columna "EXCHANGE RATE" en el archivo.')
+      }
+
+      const colToLetter = (col) => {
+        let s = ''
+        while (col > 0) { const r = (col - 1) % 26; s = String.fromCharCode(65 + r) + s; col = Math.floor((col - 1) / 26) }
+        return s
+      }
+
+      const cellCache = {}
+      const getCellValue = (rowNum, colNum) => {
+        const key = `${rowNum}_${colNum}`
+        if (cellCache[key] !== undefined) return cellCache[key]
+
+        const cell = worksheet.getRow(rowNum).getCell(colNum)
+        const val = cell.value
+
+        if (val === null || val === undefined || val === '') {
+          cellCache[key] = 0
+          return 0
+        }
+
+        if (typeof val === 'number') {
+          cellCache[key] = val
+          return val
+        }
+
+        if (typeof val === 'string') {
+          const n = parseFloat(val.replace(/[$,\s]/g, ''))
+          cellCache[key] = isNaN(n) ? 0 : n
+          return cellCache[key]
+        }
+
+        if (typeof val === 'object' && val.formula) {
+          const result = evaluateFormula(val.formula, rowNum)
+          cellCache[key] = result
+          return result
+        }
+
+        cellCache[key] = 0
+        return 0
+      }
+
+      const parseCellRef = (ref) => {
+        const match = ref.match(/^([A-Z]+)(\d+)$/)
+        if (!match) return null
+        const colStr = match[1]
+        const row = parseInt(match[2])
+        let col = 0
+        for (let i = 0; i < colStr.length; i++) {
+          col = col * 26 + (colStr.charCodeAt(i) - 64)
+        }
+        return { row, col }
+      }
+
+      const evaluateFormula = (formula, currentRow) => {
+        let expr = String(formula).replace(/^=/, '').trim()
+
+        expr = expr.replace(/SUM\(([^)]+)\)/gi, (_, args) => {
+          const parts = args.split(',')
+          let sum = 0
+          for (const part of parts) {
+            const trimmed = part.trim()
+            const rangeMatch = trimmed.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+            if (rangeMatch) {
+              const startRef = parseCellRef(rangeMatch[1] + rangeMatch[2])
+              const endRef = parseCellRef(rangeMatch[3] + rangeMatch[4])
+              if (startRef && endRef) {
+                for (let r = startRef.row; r <= endRef.row; r++) {
+                  for (let c = startRef.col; c <= endRef.col; c++) {
+                    sum += getCellValue(r, c)
+                  }
+                }
+              }
+            } else {
+              const ref = parseCellRef(trimmed)
+              if (ref) sum += getCellValue(ref.row, ref.col)
+            }
+          }
+          return String(sum)
+        })
+
+        expr = expr.replace(/ROUND\(([^,]+),(\d+)\)/gi, (_, val, decimals) => {
+          const num = evaluateExpression(val.trim(), currentRow)
+          return String(num.toFixed(parseInt(decimals)))
+        })
+
+        expr = expr.replace(/IF\(([^,]+),([^,]+),([^)]+)\)/gi, (_, cond, trueVal, falseVal) => {
+          const condResult = evaluateExpression(cond.trim(), currentRow)
+          return condResult > 0 ? trueVal.trim() : falseVal.trim()
+        })
+
+        return evaluateExpression(expr, currentRow)
+      }
+
+      const evaluateExpression = (expr, currentRow) => {
+        expr = expr.replace(/([A-Z]+\d+)/g, (match) => {
+          const ref = parseCellRef(match)
+          if (ref) return String(getCellValue(ref.row, ref.col))
+          return match
+        })
+
+        try {
+          return Function('"use strict"; return (' + expr + ')')()
+        } catch {
+          return 0
+        }
+      }
+
+      let lastValue = null
+      // Buscar el último valor real de la columna usando formulaData (SheetJS con fórmulas evaluadas)
+      for (let i = formulaData.length - 1; i >= 3; i--) {
+        const row = formulaData[i]
+        const cell = row[colTotalEmpCostUsd - 1]
+        if (cell !== null && cell !== undefined && cell !== '') {
+          const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+          if (!isNaN(num) && num !== 0) {
+            lastValue = num
+            break
+          }
+        }
+      }
+
+      if (lastValue === null) {
+        throw new Error('No se encontró ningún valor en la columna "TOTAL EMPLOYEE COST USD".')
+      }
+
+      // Buscar el último valor real de la columna (usando datos con fórmulas evaluadas)
+      let ultimoValorReal = null
+      for (let i = 3; i < formulaData.length; i++) {
+        const row = formulaData[i]
+        const cell = row[colTotalEmpCostUsd - 1] // colTotalEmpCostUsd es 1-based
+        if (cell !== null && cell !== undefined && cell !== '') {
+          const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+          if (!isNaN(num) && num !== 0) {
+            ultimoValorReal = num
+          }
+        }
+      }
+      if (ultimoValorReal !== null) {
+        lastValue = ultimoValorReal
+      }
+
+      let lastFeeUsd = null
+      for (let i = 3; i < formulaData.length; i++) {
+        const row = formulaData[i]
+        const cell = row[colFeeUsd - 1] // colFeeUsd es 1-based
+        if (cell !== null && cell !== undefined && cell !== '') {
+          const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+          if (!isNaN(num) && num !== 0) {
+            lastFeeUsd = num
+          }
+        }
+      }
+
+      if (lastFeeUsd === null) {
+        throw new Error('No se encontró ningún valor en la columna "FEE USD".')
+      }
+
+      // Buscar si existe la columna VAT y calcular el VAT adicional
+      const colVat = headerMap['VAT']
+      let lastVat = null
+      if (colVat) {
+        for (let i = 3; i < formulaData.length; i++) {
+          const row = formulaData[i]
+          const cell = row[colVat - 1]
+          if (cell !== null && cell !== undefined && cell !== '') {
+            const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+            if (!isNaN(num) && num !== 0) {
+              lastVat = num
+            }
+          }
+        }
+      }
+
+      // Buscar "Comercial Discount" en el Excel usando datos con fórmulas evaluadas
+      let comercialDiscount = null
+      for (let i = 0; i < formulaData.length; i++) {
+        const row = formulaData[i]
+        for (let j = 0; j < row.length; j++) {
+          const cell = row[j]
+          if (cell !== null && cell !== undefined) {
+            const val = String(cell).trim()
+            if (val === 'Comercial Discount') {
+              // Buscar el siguiente valor numérico
+              for (let k = j + 1; k < Math.min(j + 10, row.length); k++) {
+                const nextVal = row[k]
+                if (nextVal !== null && nextVal !== undefined && nextVal !== '') {
+                  const num = typeof nextVal === 'number' ? nextVal : parseFloat(String(nextVal).replace(/[$,]/g, ''))
+                  if (!isNaN(num) && num !== 0) {
+                    comercialDiscount = num
+                    break
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (comercialDiscount !== null) break
+      }
+
+      // Si existe VAT, sumar FEE USD + VAT
+      if (lastVat !== null) {
+        const sumaFeeVat = lastFeeUsd + lastVat
+        lastFeeUsd = sumaFeeVat
+      }
+
+      let lastExchangeRate = null
+      // Solo buscar Exchange Rate si no es Proforma Moneda COP
+      if (pdfPath !== '/Proforma Moneda COP.pdf') {
+        // Buscar usando formulaData (SheetJS con fórmulas evaluadas)
+        for (let i = formulaData.length - 1; i >= 3; i--) {
+          const row = formulaData[i]
+          const cell = row[colExchangeRate - 1] // colExchangeRate es 1-based
+          if (cell !== null && cell !== undefined && cell !== '') {
+            const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+            if (!isNaN(num) && num !== 0) {
+              lastExchangeRate = num
+              break
+            }
+          }
+        }
+        if (lastExchangeRate === null) {
+          throw new Error('No se encontró ningún valor en la columna "EXCHANGE RATE".')
+        }
+      }
+
+      const pdfResponse = await fetch(pdfPath)
+      if (!pdfResponse.ok) throw new Error('No se pudo cargar la plantilla PDF.')
+      const pdfBuffer = await pdfResponse.arrayBuffer()
+      const pdfDoc = await PDFDocument.load(pdfBuffer)
+      const pages = pdfDoc.getPages()
+      const firstPage = pages[0]
+
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+      const formattedValue = lastValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const formattedFeeUsd = lastFeeUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const feeUsdDivided = lastFeeUsd / 1.19
+      const formattedFeeUsdDivided = feeUsdDivided.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const formattedExchangeRate = lastExchangeRate !== null ? lastExchangeRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+      const totalBruto = lastValue + feeUsdDivided
+      const formattedTotalBruto = totalBruto.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      // Total a Pagar: lastValue + lastFeeUsd - Comercial Discount (si existe)
+      let totalAPagar = lastValue + lastFeeUsd
+      if (comercialDiscount !== null) {
+        totalAPagar = totalAPagar - comercialDiscount
+      }
+      const formattedTotalAPagar = totalAPagar.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      
+      // Calcular IVA Servicios
+      let ivaServicios = totalAPagar - totalBruto
+      
+      // Para Proforma Descuentos: sumar descuento_final (Vr. Unitario del grupo 3)
+      let descuentoFinal = null
+      if (comercialDiscount !== null) {
+        descuentoFinal = comercialDiscount / 1.19
+      }
+      if (descuentoFinal !== null) {
+        ivaServicios = ivaServicios + descuentoFinal
+      }
+      const formattedIvaServicios = ivaServicios.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const valorEnLetras = numberToWords(totalAPagar, pdfPath === '/Proforma Moneda COP.pdf' ? 'COP' : 'USD')
+      const textSize = 6.5
+      const textWidth = font.widthOfTextAtSize(formattedValue, textSize)
+      const cantidadWidth = font.widthOfTextAtSize('1.00', textSize)
+      const feeUsdWidth = font.widthOfTextAtSize(formattedFeeUsd, textSize)
+      const feeUsdDividedWidth = font.widthOfTextAtSize(formattedFeeUsdDivided, textSize)
+      const exchangeRateWidth = formattedExchangeRate.length > 0 ? font.widthOfTextAtSize(formattedExchangeRate, textSize) : 0
+      const totalBrutoWidth = font.widthOfTextAtSize(formattedTotalBruto, textSize)
+      const totalAPagarWidth = font.widthOfTextAtSize(formattedTotalAPagar, textSize)
+      const ivaServiciosWidth = font.widthOfTextAtSize(formattedIvaServicios, textSize)
+
+      const xVrTotal = firstPage.getWidth() - textWidth - 66
+      const xVrBruto = firstPage.getWidth() - textWidth - 144
+      const xVrUnitario = firstPage.getWidth() - textWidth - 222
+      const xCantidad = firstPage.getWidth() - cantidadWidth - 282
+      const y = firstPage.getHeight() - 232
+
+      const xVrTotal_2 = firstPage.getWidth() - feeUsdWidth - 68
+      const y_2 = firstPage.getHeight() - 256
+      const xVrUnitario_2 = firstPage.getWidth() - feeUsdDividedWidth - 224
+      const xVrBruto_2 = firstPage.getWidth() - feeUsdDividedWidth - 148
+      const xCantidad_2 = firstPage.getWidth() - cantidadWidth - 282
+
+      const xTasaCambio = firstPage.getWidth() - exchangeRateWidth - 60
+      const y_3 = firstPage.getHeight() - 190
+      const tasaCambioTextSize = 9
+
+      const xTasaCambio_2 = firstPage.getWidth() - exchangeRateWidth - 480
+      const yTasaCambio_2 = firstPage.getHeight() - 652
+
+      const xTotalBruto = firstPage.getWidth() - totalBrutoWidth - 49
+      const yTotalBruto = firstPage.getHeight() - 535
+
+      const xTotalAPagar = firstPage.getWidth() - totalAPagarWidth - 49
+      const yTotalAPagar = firstPage.getHeight() - 571
+
+      const xTotalAPagar_2 = firstPage.getWidth() - totalAPagarWidth - 250
+      const yTotalAPagar_2 = firstPage.getHeight() - 588
+
+      const xIvaServicios = firstPage.getWidth() - ivaServiciosWidth - 49
+      const yIvaServicios = firstPage.getHeight() - 553
+
+      const xValorEnLetras = 45
+      const yValorEnLetras = firstPage.getHeight() - 561
+
+      const formattedFecha = fechaElaboracion
+      const fechaWidth = font.widthOfTextAtSize(formattedFecha, 8.5)
+      const formattedFechaVencimiento = fechaVencimiento
+      const fechaVencimientoWidth = font.widthOfTextAtSize(formattedFechaVencimiento, 8.5)
+      const consecutivoWidth = fontBold.widthOfTextAtSize(consecutivo, 9)
+
+      // Variables de posición para Proforma Descuentos (copias exactas de las originales)
+      const xVrTotal_descuentos = firstPage.getWidth() - textWidth - 50
+      const yVrTotal_descuentos = firstPage.getHeight() - 221
+      const xVrBruto_descuentos = firstPage.getWidth() - textWidth - 126
+      const yVrBruto_descuentos = firstPage.getHeight() - 221
+      const xVrUnitario_descuentos = firstPage.getWidth() - textWidth - 204
+      const yVrUnitario_descuentos = firstPage.getHeight() - 221
+      const xCantidad_descuentos = firstPage.getWidth() - cantidadWidth - 282
+      const yCantidad_descuentos = firstPage.getHeight() - 221
+
+      const xVrTotal_2_descuentos = firstPage.getWidth() - feeUsdWidth - 50
+      const yVrTotal_2_descuentos = firstPage.getHeight() - 244
+      const xVrUnitario_2_descuentos = firstPage.getWidth() - feeUsdDividedWidth - 204
+      const yVrUnitario_2_descuentos = firstPage.getHeight() - 244
+      const xVrBruto_2_descuentos = firstPage.getWidth() - feeUsdDividedWidth - 126
+      const yVrBruto_2_descuentos = firstPage.getHeight() - 244
+      const xCantidad_2_descuentos = firstPage.getWidth() - cantidadWidth - 282
+      const yCantidad_2_descuentos = firstPage.getHeight() - 244
+
+      const xTasaCambio_descuentos = firstPage.getWidth() - exchangeRateWidth - 60
+      const yTasaCambio_descuentos = firstPage.getHeight() - 182
+      const xTasaCambio_2_descuentos = firstPage.getWidth() - exchangeRateWidth - 480
+      const yTasaCambio_2_descuentos = firstPage.getHeight() - 657.8
+
+      const xTotalBruto_descuentos = firstPage.getWidth() - totalBrutoWidth - 49
+      const yTotalBruto_descuentos = firstPage.getHeight() - 541
+      const xTotalAPagar_descuentos = firstPage.getWidth() - totalAPagarWidth - 49
+      const yTotalAPagar_descuentos = firstPage.getHeight() - 594
+      const xTotalAPagar_2_descuentos = firstPage.getWidth() - totalAPagarWidth - 250
+      const yTotalAPagar_2_descuentos = firstPage.getHeight() - 593
+      const xIvaServicios_descuentos = firstPage.getWidth() - ivaServiciosWidth - 49
+      const yIvaServicios_descuentos = firstPage.getHeight() - 578
+      const xValorEnLetras_descuentos = 45
+      const yValorEnLetras_descuentos = firstPage.getHeight() - 566
+
+      // Determinar si usar posiciones de Proforma Descuentos
+      const usarDescuentos = pdfPath === '/Proforma Descuentos.pdf'
+
+      // Variables de posición para campos de cliente en Proforma Descuentos (copias exactas)
+      const xNombreTercero_descuentos = 106
+      const yNombreTercero_descuentos = firstPage.getHeight() - 134
+      const xIdentificacion_descuentos = 106
+      const yIdentificacion_descuentos = firstPage.getHeight() - 146
+      const xDireccion_descuentos = 106
+      const yDireccion_descuentos = firstPage.getHeight() - 156
+      const xCiudad_descuentos = 274
+      const yCiudad_descuentos = firstPage.getHeight() - 160
+      const xTelefono_descuentos = 274
+      const yTelefono_descuentos = firstPage.getHeight() - 146
+      const xNombreCliente2_1_descuentos = 135
+      const yNombreCliente2_1_descuentos = firstPage.getHeight() - 220
+      const xNombreCliente2_2_descuentos = 174
+      const yNombreCliente2_2_descuentos = firstPage.getHeight() - 227.7
+      const xNombreCliente2_3_descuentos = 108
+      const yNombreCliente2_3_descuentos = firstPage.getHeight() - 242.5
+      const xNombreCliente2_4_descuentos = 154
+      const yNombreCliente2_4_descuentos = firstPage.getHeight() - 251
+
+      // Arrays de meses en inglés y español
+      const mesesEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+      const mesesEs = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+      const mesActualEn = mesesEn[new Date().getMonth()]
+      const mesActualEs = mesesEs[new Date().getMonth()]
+      // Instancias 1 y 3 usan inglés, instancias 2 y 4 usan español
+      const nombreClienteConMes1 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+      const nombreClienteConMes2 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
+      const nombreClienteConMes3 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+      const nombreClienteConMes4 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
+      const xNombreCliente3_descuentos = 65
+      const yNombreCliente3_descuentos = firstPage.getHeight() - 633
+      const xMoneda_descuentos = 74
+      const yMoneda_descuentos = firstPage.getHeight() - 650
+      const xPais_descuentos = 70
+      const yPais_descuentos = firstPage.getHeight() - 641.8
+      const xFechaVencimiento_2_descuentos = firstPage.getWidth() - fechaVencimientoWidth - 362
+      const yFechaVencimiento_2_descuentos = firstPage.getHeight() - 593.4
+      const xFechaElaboracion_descuentos = firstPage.getWidth() - fechaWidth - 145
+      const yFechaElaboracion_descuentos = firstPage.getHeight() - 158
+      const xConsecutivo_descuentos = firstPage.getWidth() - consecutivoWidth - 107
+      const yConsecutivo_descuentos = firstPage.getHeight() - 90.5
+      const xFechaVencimiento_descuentos = firstPage.getWidth() - fechaVencimientoWidth - 60
+      const yFechaVencimiento_descuentos = firstPage.getHeight() - 158
+
+      // Variables para los nuevos campos de descuento (Comercial Discount)
+      const vrTotalDescuento = comercialDiscount !== null ? -comercialDiscount : null
+      const vrBrutoUnitarioDescuento = comercialDiscount !== null ? -(comercialDiscount / 1.19) : null
+      const formattedVrTotalDescuento = vrTotalDescuento !== null ? vrTotalDescuento.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+      const formattedVrBrutoUnitarioDescuento = vrBrutoUnitarioDescuento !== null ? vrBrutoUnitarioDescuento.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+      const vrTotalDescuentoWidth = font.widthOfTextAtSize(formattedVrTotalDescuento, textSize)
+      const vrBrutoUnitarioDescuentoWidth = font.widthOfTextAtSize(formattedVrBrutoUnitarioDescuento, textSize)
+
+      const xCantidadDescuento = firstPage.getWidth() - cantidadWidth - 282
+      const yCantidadDescuento = firstPage.getHeight() - 267
+      const xVrUnitarioDescuento = firstPage.getWidth() - vrBrutoUnitarioDescuentoWidth - 204
+      const yVrUnitarioDescuento = firstPage.getHeight() - 267
+      const xVrBrutoDescuento = firstPage.getWidth() - vrBrutoUnitarioDescuentoWidth - 126
+      const yVrBrutoDescuento = firstPage.getHeight() - 267
+      const xVrTotalDescuento = firstPage.getWidth() - vrTotalDescuentoWidth - 50
+      const yVrTotalDescuento = firstPage.getHeight() - 267
+
+      firstPage.drawText('1.00', {
+        x: usarDescuentos ? xCantidad_descuentos : xCantidad,
+        y: usarDescuentos ? yCantidad_descuentos : y,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedValue, {
+        x: usarDescuentos ? xVrUnitario_descuentos : xVrUnitario,
+        y: usarDescuentos ? yVrUnitario_descuentos : y,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedValue, {
+        x: usarDescuentos ? xVrBruto_descuentos : xVrBruto,
+        y: usarDescuentos ? yVrBruto_descuentos : y,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedValue, {
+        x: usarDescuentos ? xVrTotal_descuentos : xVrTotal,
+        y: usarDescuentos ? yVrTotal_descuentos : y,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedFeeUsd, {
+        x: usarDescuentos ? xVrTotal_2_descuentos : xVrTotal_2,
+        y: usarDescuentos ? yVrTotal_2_descuentos : y_2,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedFeeUsdDivided, {
+        x: usarDescuentos ? xVrUnitario_2_descuentos : xVrUnitario_2,
+        y: usarDescuentos ? yVrUnitario_2_descuentos : y_2,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedFeeUsdDivided, {
+        x: usarDescuentos ? xVrBruto_2_descuentos : xVrBruto_2,
+        y: usarDescuentos ? yVrBruto_2_descuentos : y_2,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText('1.00', {
+        x: usarDescuentos ? xCantidad_2_descuentos : xCantidad_2,
+        y: usarDescuentos ? yCantidad_2_descuentos : y_2,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      // Solo mostrar tasa de cambio si NO es Proforma Moneda COP
+      if (pdfPath !== '/Proforma Moneda COP.pdf') {
+        firstPage.drawText(formattedExchangeRate, {
+          x: usarDescuentos ? xTasaCambio_descuentos : xTasaCambio,
+          y: usarDescuentos ? yTasaCambio_descuentos : y_3,
+          size: tasaCambioTextSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        firstPage.drawText(formattedExchangeRate, {
+          x: usarDescuentos ? xTasaCambio_2_descuentos : xTasaCambio_2,
+          y: usarDescuentos ? yTasaCambio_2_descuentos : yTasaCambio_2,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+      }
+
+      const xFecha = firstPage.getWidth() - fechaWidth - 145
+      const yFecha = firstPage.getHeight() - 158
+
+      firstPage.drawText(formattedFecha, {
+        x: usarDescuentos ? xFechaElaboracion_descuentos : xFecha,
+        y: usarDescuentos ? yFechaElaboracion_descuentos : yFecha,
+        size: 6.5,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      const xFechaVencimiento = firstPage.getWidth() - fechaVencimientoWidth - 60
+      const yFechaVencimiento = firstPage.getHeight() - 158
+
+      const xFechaVencimiento_2 = firstPage.getWidth() - fechaVencimientoWidth - 362
+      const yFechaVencimiento_2 = firstPage.getHeight() - 588
+
+      const xConsecutivo = firstPage.getWidth() - consecutivoWidth - 107
+      const yConsecutivo = firstPage.getHeight() - 90.5
+
+      firstPage.drawText(formattedFechaVencimiento, {
+        x: usarDescuentos ? xFechaVencimiento_descuentos : xFechaVencimiento,
+        y: usarDescuentos ? yFechaVencimiento_descuentos : yFechaVencimiento,
+        size: 6.5,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedFechaVencimiento + ' por', {
+        x: usarDescuentos ? xFechaVencimiento_2_descuentos : xFechaVencimiento_2,
+        y: usarDescuentos ? yFechaVencimiento_2_descuentos : yFechaVencimiento_2,
+        size: 6.5,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(consecutivo, {
+        x: usarDescuentos ? xConsecutivo_descuentos : xConsecutivo,
+        y: usarDescuentos ? yConsecutivo_descuentos : yConsecutivo,
+        size: 8,
+        font: fontBold,
+        color: rgb(0, 0, 0),
+      })
+
+      // Agregar información del cliente seleccionado
+      if (clienteSeleccionadoEOR !== '') {
+        if (clienteData) {
+          const clienteFontSize = 6
+          
+          // Nombre cliente (principal - Nombre tercero)
+          firstPage.drawText(clienteData.nombreTercero || '', {
+            x: usarDescuentos ? xNombreTercero_descuentos : 106,
+            y: usarDescuentos ? yNombreTercero_descuentos : firstPage.getHeight() - 134,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Nombre cliente_2 (Nombre cliente de la columna J + mes en inglés)
+          const meses = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+          const mesActual = meses[new Date().getMonth()]
+
+          
+          // Posiciones independientes para las 4 instancias
+          const xNombreCliente2_1 = 135
+          const yNombreCliente2_1 = firstPage.getHeight() - 229
+          
+          const xNombreCliente2_2 = 175
+          const yNombreCliente2_2 = firstPage.getHeight() - 241
+          
+          const xNombreCliente2_3 = 108
+          const yNombreCliente2_3 = firstPage.getHeight() - 253.6
+          
+          const xNombreCliente2_4 = 154
+          const yNombreCliente2_4 = firstPage.getHeight() - 265
+          
+          const xNombreCliente3 = 65
+          const yNombreCliente3 = firstPage.getHeight() - 628
+          
+          const xMoneda = 74
+          const yMoneda = firstPage.getHeight() - 644
+          
+          const xPais = 70
+          const yPais = firstPage.getHeight() - 636
+          
+          // Nombre cliente_2 - Instancia 1 (inglés)
+          firstPage.drawText(nombreClienteConMes1, {
+            x: usarDescuentos ? xNombreCliente2_1_descuentos : xNombreCliente2_1,
+            y: usarDescuentos ? yNombreCliente2_1_descuentos : yNombreCliente2_1,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Nombre cliente_2 - Instancia 2 (español)
+          firstPage.drawText(nombreClienteConMes2, {
+            x: usarDescuentos ? xNombreCliente2_2_descuentos : xNombreCliente2_2,
+            y: usarDescuentos ? yNombreCliente2_2_descuentos : yNombreCliente2_2,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Nombre cliente_2 - Instancia 3 (inglés)
+          firstPage.drawText(nombreClienteConMes3, {
+            x: usarDescuentos ? xNombreCliente2_3_descuentos : xNombreCliente2_3,
+            y: usarDescuentos ? yNombreCliente2_3_descuentos : yNombreCliente2_3,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Nombre cliente_2 - Instancia 4 (español)
+          firstPage.drawText(nombreClienteConMes4, {
+            x: usarDescuentos ? xNombreCliente2_4_descuentos : xNombreCliente2_4,
+            y: usarDescuentos ? yNombreCliente2_4_descuentos : yNombreCliente2_4,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Nombre cliente_3 (solo valor de columna J sin mes)
+          firstPage.drawText(clienteData.nombreClienteFinal || '', {
+            x: usarDescuentos ? xNombreCliente3_descuentos : xNombreCliente3,
+            y: usarDescuentos ? yNombreCliente3_descuentos : yNombreCliente3,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Moneda facturación
+          const monedaTexto = clienteData.monedaFacturacion === 'USD' ? 'US dollar' : (clienteData.monedaFacturacion || '')
+          firstPage.drawText(monedaTexto, {
+            x: usarDescuentos ? xMoneda_descuentos : xMoneda,
+            y: usarDescuentos ? yMoneda_descuentos : yMoneda,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // País (valor fijo)
+          firstPage.drawText('Colombia', {
+            x: usarDescuentos ? xPais_descuentos : xPais,
+            y: usarDescuentos ? yPais_descuentos : yPais,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Identificación
+          firstPage.drawText(clienteData.identificacion || '', {
+            x: usarDescuentos ? xIdentificacion_descuentos : 106,
+            y: usarDescuentos ? yIdentificacion_descuentos : firstPage.getHeight() - 146,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Dirección (con salto de línea automático)
+          const direccion = clienteData.direccion || ''
+          const palabras = direccion.split(' ')
+          const lineas = []
+          let lineaActual = ''
+          
+          for (let i = 0; i < palabras.length; i++) {
+            const palabra = palabras[i]
+            const prueba = lineaActual ? lineaActual + ' ' + palabra : palabra
+            const ancho = font.widthOfTextAtSize(prueba, clienteFontSize)
+            
+            if (ancho > 130 && lineaActual) {
+              lineas.push(lineaActual)
+              lineaActual = palabra
+            } else {
+              lineaActual = prueba
+            }
+          }
+          if (lineaActual) {
+            lineas.push(lineaActual)
+          }
+          
+          lineas.forEach((linea, index) => {
+            firstPage.drawText(linea, {
+              x: usarDescuentos ? xDireccion_descuentos : 106,
+              y: usarDescuentos ? yDireccion_descuentos - (index * 8) : firstPage.getHeight() - 156 - (index * 8),
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+          })
+
+          // Ciudad
+          firstPage.drawText(clienteData.ciudad || '', {
+            x: usarDescuentos ? xCiudad_descuentos : 274,
+            y: usarDescuentos ? yCiudad_descuentos : firstPage.getHeight() - 166,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+
+          // Teléfono
+          firstPage.drawText(clienteData.telefono || '', {
+            x: usarDescuentos ? xTelefono_descuentos : 274,
+            y: usarDescuentos ? yTelefono_descuentos : firstPage.getHeight() - 146,
+            size: clienteFontSize,
+            font,
+            color: rgb(0, 0, 0),
+          })
+        }
+      }
+
+      firstPage.drawText(formattedTotalBruto, {
+        x: usarDescuentos ? xTotalBruto_descuentos : xTotalBruto,
+        y: usarDescuentos ? yTotalBruto_descuentos : yTotalBruto,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedTotalAPagar, {
+        x: usarDescuentos ? xTotalAPagar_descuentos : xTotalAPagar,
+        y: usarDescuentos ? yTotalAPagar_descuentos : yTotalAPagar,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedTotalAPagar, {
+        x: usarDescuentos ? xTotalAPagar_2_descuentos : xTotalAPagar_2,
+        y: usarDescuentos ? yTotalAPagar_2_descuentos : yTotalAPagar_2,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(formattedIvaServicios, {
+        x: usarDescuentos ? xIvaServicios_descuentos : xIvaServicios,
+        y: usarDescuentos ? yIvaServicios_descuentos : yIvaServicios,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      firstPage.drawText(valorEnLetras, {
+        x: usarDescuentos ? xValorEnLetras_descuentos : xValorEnLetras,
+        y: usarDescuentos ? yValorEnLetras_descuentos : yValorEnLetras,
+        size: textSize,
+        font,
+        color: rgb(0, 0, 0),
+      })
+
+      // Dibujar los campos adicionales de descuento solo si es Proforma Descuentos y existe Comercial Discount
+      if (usarDescuentos && comercialDiscount !== null) {
+        firstPage.drawText('1.00', {
+          x: xCantidadDescuento,
+          y: yCantidadDescuento,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        firstPage.drawText(formattedVrBrutoUnitarioDescuento, {
+          x: xVrUnitarioDescuento,
+          y: yVrUnitarioDescuento,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        firstPage.drawText(formattedVrBrutoUnitarioDescuento, {
+          x: xVrBrutoDescuento,
+          y: yVrBrutoDescuento,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        firstPage.drawText(formattedVrTotalDescuento, {
+          x: xVrTotalDescuento,
+          y: yVrTotalDescuento,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        // Dibujar Descuento Final
+        const formattedDescuentoFinal = descuentoFinal !== null ? descuentoFinal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
+        const descuentoFinalWidth = font.widthOfTextAtSize(formattedDescuentoFinal, textSize)
+        const xDescuentoFinal = firstPage.getWidth() - descuentoFinalWidth - 50
+        const yDescuentoFinal = firstPage.getHeight() - 560
+
+        firstPage.drawText(formattedDescuentoFinal, {
+          x: xDescuentoFinal,
+          y: yDescuentoFinal,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+      }
+
+      const pdfBytes = await pdfDoc.save()
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Proforma - ${archivoFacturacion.name.replace('.xlsx', '').replace('.xls', '')}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      setExitoProforma(true)
+      setTimeout(() => setExitoProforma(false), 5000)
+
+      const nuevoConsecutivo = parseInt(consecutivo) + 1
+      try {
+        await sql`
+          UPDATE proformas_config 
+          SET consecutivo = ${nuevoConsecutivo}, updated_at = CURRENT_TIMESTAMP
+          WHERE id = (SELECT id FROM proformas_config ORDER BY id DESC LIMIT 1)
+        `
+        setConsecutivo(String(nuevoConsecutivo))
+      } catch (err) {
+        console.error('Error al actualizar consecutivo:', err)
+      }
+    } catch (err) {
+      setErrorProforma(err.message)
+    } finally {
+      setGenerandoProforma(false)
+    }
+  }
+
+  const enviarNotificacion = async () => {
+    setErrorNotificacion(null)
+    setExitoNotificacion(false)
+
+    if (!archivoFacturacion) {
+      setErrorNotificacion('Sube el archivo de facturación.')
+      return
+    }
+
+    setEnviandoNotificacion(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', archivoFacturacion, archivoFacturacion.name)
+
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Error al enviar el correo')
+      }
+
+      setExitoNotificacion(true)
+      setTimeout(() => setExitoNotificacion(false), 5000)
+    } catch (err) {
+      setErrorNotificacion(err.message)
+    } finally {
+      setEnviandoNotificacion(false)
+    }
+  }
+
   return (
     <div className="app">
       {/* Header Corporativo Solutions & Payroll */}
@@ -3169,6 +4271,18 @@ function App() {
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
               Facturación
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'proformas' ? 'active' : ''}`}
+              onClick={() => setActiveTab('proformas')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M9 13h6"/>
+                <path d="M9 17h3"/>
+              </svg>
+              Generar Proformas
             </button>
             <button
               className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
@@ -3767,6 +4881,254 @@ function App() {
                         <line x1="12" y1="15" x2="12" y2="3"/>
                       </svg>
                       Generar archivo
+                    </>
+                  )}
+                </button>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+      )}
+
+      {activeTab === 'proformas' && (
+      <main className="main-content">
+        <div className="container">
+          <div className="card">
+            <div className="card-header">
+              <h2>Generar Proformas</h2>
+              <p className="description">
+                Sube el archivo de facturación para generar las proformas.
+              </p>
+            </div>
+
+            <div className="card-body">
+              <div className="form-section">
+
+                <div className="form-group">
+                  <label className="label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    Consecutivo
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 001"
+                    className="select-input"
+                    value={consecutivo}
+                    onChange={(e) => setConsecutivo(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                      <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    Cliente
+                  </label>
+                  <select
+                    className="select-input"
+                    value={clienteSeleccionadoEOR}
+                    onChange={(e) => setClienteSeleccionadoEOR(e.target.value)}
+                  >
+                    <option value="">Selecciona un cliente</option>
+                    {clientesEOR.map((cliente, index) => (
+                      <option key={index} value={index}>
+                        {cliente.nombreTercero}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                      <line x1="16" y1="2" x2="16" y2="6"/>
+                      <line x1="8" y1="2" x2="8" y2="6"/>
+                      <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Fecha elaboración
+                  </label>
+                  <input
+                    type="date"
+                    className="select-input"
+                    value={fechaElaboracion}
+                    onChange={(e) => setFechaElaboracion(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                      <line x1="16" y1="2" x2="16" y2="6"/>
+                      <line x1="8" y1="2" x2="8" y2="6"/>
+                      <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Fecha vencimiento
+                  </label>
+                  <input
+                    type="date"
+                    className="select-input"
+                    value={fechaVencimiento}
+                    onChange={(e) => setFechaVencimiento(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="label">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                    </svg>
+                    Archivo de facturación
+                  </label>
+                  <input
+                    ref={inputFacturacion}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="file-input"
+                    onChange={(e) => handleFileChange(e, setArchivoFacturacion)}
+                  />
+                  <div
+                    className={`drop-zone ${dragFacturacion ? 'drag-active' : ''} ${archivoFacturacion ? 'has-file' : ''}`}
+                    onClick={() => inputFacturacion.current.click()}
+                    onDragOver={(e) => { e.preventDefault(); setDragFacturacion(true) }}
+                    onDragLeave={() => setDragFacturacion(false)}
+                    onDrop={(e) => handleFileDrop(e, setArchivoFacturacion, setDragFacturacion)}
+                  >
+                    {archivoFacturacion ? (
+                      <div className="file-preview">
+                        <div className="file-icon">
+                          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="8" y1="13" x2="16" y2="13"/>
+                            <line x1="8" y1="17" x2="16" y2="17"/>
+                          </svg>
+                        </div>
+                        <div className="file-details">
+                          <p className="file-name">{archivoFacturacion.name}</p>
+                          <p className="file-size">{formatSize(archivoFacturacion.size)}</p>
+                        </div>
+                        <button
+                          className="btn-remove"
+                          onClick={(e) => { e.stopPropagation(); setArchivoFacturacion(null); inputFacturacion.current.value = '' }}
+                          title="Quitar archivo"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="drop-zone-content">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="17 8 12 3 7 8"/>
+                          <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <div className="drop-zone-text">
+                          <p className="drop-zone-title">Sube el archivo de facturación</p>
+                          <p className="drop-zone-subtitle">Arrastra aquí o haz clic para seleccionar</p>
+                        </div>
+                        <p className="drop-zone-hint">.xlsx / .xls</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {errorProforma && (
+                  <div className="alert alert-error">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    {errorProforma}
+                  </div>
+                )}
+                {exitoProforma && (
+                  <div className="alert alert-success">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    ¡Proforma generada y descargada correctamente!
+                  </div>
+                )}
+
+                <button
+                  className="btn-primary"
+                  onClick={generarProforma}
+                  disabled={generandoProforma || !archivoFacturacion}
+                >
+                  {generandoProforma ? (
+                    <>
+                      <svg className="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                      </svg>
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                      </svg>
+                      Generar Proforma
+                    </>
+                  )}
+                </button>
+
+                {errorNotificacion && (
+                  <div className="alert alert-error">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    {errorNotificacion}
+                  </div>
+                )}
+                {exitoNotificacion && (
+                  <div className="alert alert-success">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    ¡Notificación enviada correctamente!
+                  </div>
+                )}
+
+                <button
+                  className="btn-primary"
+                  onClick={enviarNotificacion}
+                  disabled={enviandoNotificacion || !archivoFacturacion}
+                  style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                >
+                  {enviandoNotificacion ? (
+                    <>
+                      <svg className="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                      </svg>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                      </svg>
+                      Enviar Notificación
                     </>
                   )}
                 </button>
