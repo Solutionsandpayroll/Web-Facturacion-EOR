@@ -3414,8 +3414,9 @@ function App() {
             const totalEmpCostUsd = getCellValue(rowNum, colTotalEmpCostUsd)
             const feeUsd = colFeeUsd ? getCellValue(rowNum, colFeeUsd) : 0
             const vat = colVAT ? getCellValue(rowNum, colVAT) : 0
+            const exchangeRate = colExchangeRate ? getCellValue(rowNum, colExchangeRate) : 0
             const employeeCode = cellValue
-            filasEmpleadosOncehub.push({ totalEmpCostUsd, feeUsd, vat, employeeCode, rowNum })
+            filasEmpleadosOncehub.push({ totalEmpCostUsd, feeUsd, vat, exchangeRate, employeeCode, rowNum })
           }
         }
       }
@@ -3584,16 +3585,16 @@ function App() {
       const totalAPagarWidth = font.widthOfTextAtSize(formattedTotalAPagar, textSize)
       const ivaServiciosWidth = font.widthOfTextAtSize(formattedIvaServicios, textSize)
 
-      const xVrTotal = firstPage.getWidth() - textWidth - 66
-      const xVrBruto = firstPage.getWidth() - textWidth - 144
-      const xVrUnitario = firstPage.getWidth() - textWidth - 222
+      const xVrTotal = firstPage.getWidth() - textWidth - 50
+      const xVrBruto = firstPage.getWidth() - textWidth - 126
+      const xVrUnitario = firstPage.getWidth() - textWidth - 204
       const xCantidad = firstPage.getWidth() - cantidadWidth - 282
-      const y = firstPage.getHeight() - 232
+      const y = firstPage.getHeight() - 228
 
-      const xVrTotal_2 = firstPage.getWidth() - feeUsdWidth - 68
-      const y_2 = firstPage.getHeight() - 256
-      const xVrUnitario_2 = firstPage.getWidth() - feeUsdDividedWidth - 224
-      const xVrBruto_2 = firstPage.getWidth() - feeUsdDividedWidth - 148
+      const xVrTotal_2 = firstPage.getWidth() - feeUsdWidth - 50
+      const y_2 = firstPage.getHeight() - 250
+      const xVrUnitario_2 = firstPage.getWidth() - feeUsdDividedWidth - 204
+      const xVrBruto_2 = firstPage.getWidth() - feeUsdDividedWidth - 126
       const xCantidad_2 = firstPage.getWidth() - cantidadWidth - 282
 
       const xTasaCambio = firstPage.getWidth() - exchangeRateWidth - 60
@@ -3663,44 +3664,48 @@ function App() {
 
       // Variables para el tercer paquete (ONCEHUB - filas de empleados individuales)
       // Paquete 3 - Empleado 1
-      const xCantidadOncehub1 = 300
-      const yCantidadOncehub1 = firstPage.getHeight() - 232
-      const xVrUnitarioOncehub1 = 360
-      const yVrUnitarioOncehub1 = firstPage.getHeight() - 232
-      const xVrBrutoOncehub1 = 440
-      const yVrBrutoOncehub1 = firstPage.getHeight() - 232
-      const xVrTotalOncehub1 = 500
-      const yVrTotalOncehub1 = firstPage.getHeight() - 232
+      const xCantidadOncehub1 = 336
+      const yCantidadOncehub1 = firstPage.getHeight() - 224
+      const xVrUnitarioOncehub1 = 417
+      const yVrUnitarioOncehub1 = firstPage.getHeight() - 224
+      const xVrBrutoOncehub1 = 491
+      const yVrBrutoOncehub1 = firstPage.getHeight() - 224
+      const xVrTotalOncehub1 = 566
+      const yVrTotalOncehub1 = firstPage.getHeight() - 224
 
       // Segundo grupo (afecta IVA) - Paquete 3 (Empleado 1)
-      const xCantidadOncehub1_2 = 300
-      const yCantidadOncehub1_2 = firstPage.getHeight() - 256
-      const xVrUnitarioOncehub1_2 = 360
-      const yVrUnitarioOncehub1_2 = firstPage.getHeight() - 256
-      const xVrBrutoOncehub1_2 = 400
-      const yVrBrutoOncehub1_2 = firstPage.getHeight() - 256
-      const xVrTotalOncehub1_2 = 430
-      const yVrTotalOncehub1_2 = firstPage.getHeight() - 256
+      const xCantidadOncehub1_2 = 336
+      const yCantidadOncehub1_2 = firstPage.getHeight() - 246
+      const xVrUnitarioOncehub1_2 = 417
+      const yVrUnitarioOncehub1_2 = firstPage.getHeight() - 246
+      const xVrBrutoOncehub1_2 = 491
+      const yVrBrutoOncehub1_2 = firstPage.getHeight() - 246
+      const xVrTotalOncehub1_2 = 566
+      const yVrTotalOncehub1_2 = firstPage.getHeight() - 246
 
       // Segundo grupo (afecta IVA) - Paquete 4 (Empleado 2)
-      const xCantidadOncehub2_2 = 300
-      const yCantidadOncehub2_2 = firstPage.getHeight() - 300
-      const xVrUnitarioOncehub2_2 = 360
-      const yVrUnitarioOncehub2_2 = firstPage.getHeight() - 300
-      const xVrBrutoOncehub2_2 = 440
-      const yVrBrutoOncehub2_2 = firstPage.getHeight() - 300
-      const xVrTotalOncehub2_2 = 500
-      const yVrTotalOncehub2_2 = firstPage.getHeight() - 300
+      const xCantidadOncehub2_2 = 336
+      const yCantidadOncehub2_2 = firstPage.getHeight() - 292
+      const xVrUnitarioOncehub2_2 = 417
+      const yVrUnitarioOncehub2_2 = firstPage.getHeight() - 292
+      const xVrBrutoOncehub2_2 = 491
+      const yVrBrutoOncehub2_2 = firstPage.getHeight() - 292
+      const xVrTotalOncehub2_2 = 566
+      const yVrTotalOncehub2_2 = firstPage.getHeight() - 292
 
       // Paquete 4 - Empleado 2
-      const xCantidadOncehub2 = 300
+      const xCantidadOncehub2 = 336
       const yCantidadOncehub2 = firstPage.getHeight() - 270
-      const xVrUnitarioOncehub2 = 360
+      const xVrUnitarioOncehub2 = 417
       const yVrUnitarioOncehub2 = firstPage.getHeight() - 270
-      const xVrBrutoOncehub2 = 440
+      const xVrBrutoOncehub2 = 491
       const yVrBrutoOncehub2 = firstPage.getHeight() - 270
-      const xVrTotalOncehub2 = 500
+      const xVrTotalOncehub2 = 566
       const yVrTotalOncehub2 = firstPage.getHeight() - 270
+
+      // Tasa de cambio para ONCEHUB
+      const xTasaCambioOncehub = 528
+      const yTasaCambioOncehub = firstPage.getHeight() - 185
 
       const xTasaCambio_descuentos = firstPage.getWidth() - exchangeRateWidth - 60
       const yTasaCambio_descuentos = firstPage.getHeight() - 182
@@ -3854,8 +3859,8 @@ function App() {
         color: rgb(0, 0, 0),
       })
 
-      // Solo mostrar tasa de cambio si NO es Proforma Moneda COP
-      if (pdfPath !== '/Proforma Moneda COP.pdf') {
+      // Solo mostrar PRIMERA tasa de cambio si NO es Proforma Moneda COP y NO es ONCEHUB
+      if (pdfPath !== '/Proforma Moneda COP.pdf' && !usarOncehub) {
         firstPage.drawText(formattedExchangeRate, {
           x: usarDescuentos ? xTasaCambio_descuentos : xTasaCambio,
           y: usarDescuentos ? yTasaCambio_descuentos : y_3,
@@ -3863,7 +3868,10 @@ function App() {
           font,
           color: rgb(0, 0, 0),
         })
+      }
 
+      // Segunda tasa de cambio - siempre se muestra (excepto Moneda COP)
+      if (pdfPath !== '/Proforma Moneda COP.pdf') {
         firstPage.drawText(formattedExchangeRate, {
           x: usarDescuentos ? xTasaCambio_2_descuentos : xTasaCambio_2,
           y: usarDescuentos ? yTasaCambio_2_descuentos : yTasaCambio_2,
@@ -3881,6 +3889,12 @@ function App() {
 
       // ONCEHUB: Dibujar paquetes de empleados individuales
       if (usarOncehub && filasEmpleadosOncehub.length > 0) {
+        // Función helper para alinear texto a la derecha
+        const drawTextRightAligned = (text, x, y, size) => {
+          const textWidth = font.widthOfTextAtSize(text, size)
+          firstPage.drawText(text, { x: x - textWidth, y, size, font, color: rgb(0, 0, 0) })
+        }
+
         // Paquete 3 - Empleado 1
         if (filasEmpleadosOncehub[0]) {
           const emp1 = filasEmpleadosOncehub[0]
@@ -3894,16 +3908,16 @@ function App() {
           const formattedFeeUsdDivided1 = feeUsdDivided1.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           const formattedTotal1 = (lastFeeUsd1 + lastVat1).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-          firstPage.drawText('1.00', { x: xCantidadOncehub1, y: yCantidadOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedValue1, { x: xVrUnitarioOncehub1, y: yVrUnitarioOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedValue1, { x: xVrBrutoOncehub1, y: yVrBrutoOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedValue1, { x: xVrTotalOncehub1, y: yVrTotalOncehub1, size: textSize, font, color: rgb(0, 0, 0) })
+          drawTextRightAligned('1.00', xCantidadOncehub1, yCantidadOncehub1, textSize)
+          drawTextRightAligned(formattedValue1, xVrUnitarioOncehub1, yVrUnitarioOncehub1, textSize)
+          drawTextRightAligned(formattedValue1, xVrBrutoOncehub1, yVrBrutoOncehub1, textSize)
+          drawTextRightAligned(formattedValue1, xVrTotalOncehub1, yVrTotalOncehub1, textSize)
 
           // Segundo grupo (afecta IVA) - Empleado 1
-          firstPage.drawText('1.00', { x: xCantidadOncehub1_2, y: yCantidadOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedFeeUsdDivided1, { x: xVrUnitarioOncehub1_2, y: yVrUnitarioOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedFeeUsdDivided1, { x: xVrBrutoOncehub1_2, y: yVrBrutoOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedTotal1, { x: xVrTotalOncehub1_2, y: yVrTotalOncehub1_2, size: textSize, font, color: rgb(0, 0, 0) })
+          drawTextRightAligned('1.00', xCantidadOncehub1_2, yCantidadOncehub1_2, textSize)
+          drawTextRightAligned(formattedFeeUsdDivided1, xVrUnitarioOncehub1_2, yVrUnitarioOncehub1_2, textSize)
+          drawTextRightAligned(formattedFeeUsdDivided1, xVrBrutoOncehub1_2, yVrBrutoOncehub1_2, textSize)
+          drawTextRightAligned(formattedTotal1, xVrTotalOncehub1_2, yVrTotalOncehub1_2, textSize)
 
           // 4 instancias de nombres empleado 1
           const nombreEmp1 = nombresEmpleados[String(emp1.employeeCode)] || clienteData.nombreClienteFinal
@@ -3913,6 +3927,12 @@ function App() {
           firstPage.drawText(nombreMesEs1, { x: 175, y: firstPage.getHeight() - 234.6, size: 6, font, color: rgb(0, 0, 0) })
           firstPage.drawText(nombreMesEn1, { x: 108, y: firstPage.getHeight() - 246, size: 6, font, color: rgb(0, 0, 0) })
           firstPage.drawText(nombreMesEs1, { x: 154, y: firstPage.getHeight() - 257.3, size: 6, font, color: rgb(0, 0, 0) })
+        }
+
+        // Tasa de cambio - ONCEHUB (valor único)
+        if (filasEmpleadosOncehub.length > 0 && filasEmpleadosOncehub[0].exchangeRate) {
+          const formattedTasaCambio = filasEmpleadosOncehub[0].exchangeRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          firstPage.drawText(formattedTasaCambio, { x: xTasaCambioOncehub, y: yTasaCambioOncehub, size: tasaCambioTextSize, font, color: rgb(0, 0, 0) })
         }
 
         // Paquete 4 - Empleado 2
@@ -3928,16 +3948,16 @@ function App() {
           const formattedFeeUsdDivided2 = feeUsdDivided2.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           const formattedTotal2 = (lastFeeUsd2 + lastVat2).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-          firstPage.drawText('1.00', { x: xCantidadOncehub2, y: yCantidadOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedValue2, { x: xVrUnitarioOncehub2, y: yVrUnitarioOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedValue2, { x: xVrBrutoOncehub2, y: yVrBrutoOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedValue2, { x: xVrTotalOncehub2, y: yVrTotalOncehub2, size: textSize, font, color: rgb(0, 0, 0) })
+          drawTextRightAligned('1.00', xCantidadOncehub2, yCantidadOncehub2, textSize)
+          drawTextRightAligned(formattedValue2, xVrUnitarioOncehub2, yVrUnitarioOncehub2, textSize)
+          drawTextRightAligned(formattedValue2, xVrBrutoOncehub2, yVrBrutoOncehub2, textSize)
+          drawTextRightAligned(formattedValue2, xVrTotalOncehub2, yVrTotalOncehub2, textSize)
 
           // Segundo grupo (afecta IVA) - Empleado 2
-          firstPage.drawText('1.00', { x: xCantidadOncehub2_2, y: yCantidadOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedFeeUsdDivided2, { x: xVrUnitarioOncehub2_2, y: yVrUnitarioOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedFeeUsdDivided2, { x: xVrBrutoOncehub2_2, y: yVrBrutoOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(formattedTotal2, { x: xVrTotalOncehub2_2, y: yVrTotalOncehub2_2, size: textSize, font, color: rgb(0, 0, 0) })
+          drawTextRightAligned('1.00', xCantidadOncehub2_2, yCantidadOncehub2_2, textSize)
+          drawTextRightAligned(formattedFeeUsdDivided2, xVrUnitarioOncehub2_2, yVrUnitarioOncehub2_2, textSize)
+          drawTextRightAligned(formattedFeeUsdDivided2, xVrBrutoOncehub2_2, yVrBrutoOncehub2_2, textSize)
+          drawTextRightAligned(formattedTotal2, xVrTotalOncehub2_2, yVrTotalOncehub2_2, textSize)
 
           // 4 instancias de nombres empleado 2
           const nombreEmp2 = nombresEmpleados[String(emp2.employeeCode)] || clienteData.nombreClienteFinal
