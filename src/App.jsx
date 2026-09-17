@@ -3987,7 +3987,7 @@ function App() {
       const xFechaVencimiento_2 = firstPage.getWidth() - fechaVencimientoWidth - 362
       const yFechaVencimiento_2 = firstPage.getHeight() - 588
 
-      const xConsecutivo = firstPage.getWidth() - consecutivoWidth - 107
+      const xConsecutivo = firstPage.getWidth() - consecutivoWidth - 102
       const yConsecutivo = firstPage.getHeight() - 90.5
 
       firstPage.drawText(formattedFechaVencimiento, {
@@ -4006,8 +4006,10 @@ function App() {
         color: rgb(0, 0, 0),
       })
 
+      // Consecutivo alineado a la izquierda con posición fija
+      const xConsecutivoFinal = usarDescuentos ? 500 : 500
       firstPage.drawText(consecutivo, {
-        x: usarDescuentos ? xConsecutivo_descuentos : xConsecutivo,
+        x: xConsecutivoFinal,
         y: usarDescuentos ? yConsecutivo_descuentos : yConsecutivo,
         size: 8,
         font: fontBold,
@@ -4352,8 +4354,8 @@ function App() {
         firstPage.drawRectangle({
           x: 0,
           y: 520,
-          width: 20,
-          height: 40,
+          width: 30,
+          height: 50,
           color: rgb(1, 1, 1),
 
         })
