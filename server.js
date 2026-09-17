@@ -32,7 +32,7 @@ app.post('/api/send-email', upload.single('file'), async (req, res) => {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Nuevo Reembolso</title>
+<title>Nueva Proforma</title>
 <style>
   body { margin:0; padding:0; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; background-color:#f5f5f5; }
   .email-container { max-width:600px; margin:20px auto; background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); }
@@ -67,7 +67,7 @@ app.post('/api/send-email', upload.single('file'), async (req, res) => {
 
     <div class="message-box">
       <p>
-        Le informamos que hay un <span class="highlight">nuevo reembolso</span> disponible.
+        Le informamos que hay un <span class="highlight">Nueva Proforma</span> disponible.
       </p>
       <p>
         Por favor revise el archivo adjunto para más detalles.
@@ -89,7 +89,7 @@ app.post('/api/send-email', upload.single('file'), async (req, res) => {
     const info = await transporter.sendMail({
       from: '"Solutions & Payroll" <noreply@solutionsandpayroll.com>',
       to: 'automatizacion2@solutionsandpayroll.com',
-      subject: 'Nuevo reembolso',
+      subject: 'Nueva Proforma',
       html: htmlContent,
       attachments: [
         {
