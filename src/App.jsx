@@ -3281,9 +3281,6 @@ function App() {
       if (nombreCliente.includes('ONCEHUB')) {
         pdfPath = '/Proforma Oncehub.pdf'
         usarOncehub = true
-      } else if (nombreCliente.includes('HEMMERSBACH')) {
-        pdfPath = '/Proforma HEMMERSBACH.pdf'
-        usarHemmersbach = true
       } else if (nombreCliente.includes('EPDM') || nombreCliente.includes('RIVERMATE')) {
         pdfPath = '/Proforma Moneda COP.pdf'
       } else if (nombreCliente.includes('EUROPORTAGE')) {
@@ -3675,33 +3672,33 @@ function App() {
 
       // Segundo grupo (afecta IVA) - Paquete 3 (Empleado 1)
       const xCantidadOncehub1_2 = 336
-      const yCantidadOncehub1_2 = firstPage.getHeight() - 246
+      const yCantidadOncehub1_2 = firstPage.getHeight() - 240
       const xVrUnitarioOncehub1_2 = 417
-      const yVrUnitarioOncehub1_2 = firstPage.getHeight() - 246
+      const yVrUnitarioOncehub1_2 = firstPage.getHeight() - 240
       const xVrBrutoOncehub1_2 = 491
-      const yVrBrutoOncehub1_2 = firstPage.getHeight() - 246
+      const yVrBrutoOncehub1_2 = firstPage.getHeight() - 240
       const xVrTotalOncehub1_2 = 566
-      const yVrTotalOncehub1_2 = firstPage.getHeight() - 246
+      const yVrTotalOncehub1_2 = firstPage.getHeight() - 240
 
       // Segundo grupo (afecta IVA) - Paquete 4 (Empleado 2)
       const xCantidadOncehub2_2 = 336
-      const yCantidadOncehub2_2 = firstPage.getHeight() - 292
+      const yCantidadOncehub2_2 = firstPage.getHeight() - 272
       const xVrUnitarioOncehub2_2 = 417
-      const yVrUnitarioOncehub2_2 = firstPage.getHeight() - 292
+      const yVrUnitarioOncehub2_2 = firstPage.getHeight() - 272
       const xVrBrutoOncehub2_2 = 491
-      const yVrBrutoOncehub2_2 = firstPage.getHeight() - 292
+      const yVrBrutoOncehub2_2 = firstPage.getHeight() - 272
       const xVrTotalOncehub2_2 = 566
-      const yVrTotalOncehub2_2 = firstPage.getHeight() - 292
+      const yVrTotalOncehub2_2 = firstPage.getHeight() - 272
 
       // Paquete 4 - Empleado 2
       const xCantidadOncehub2 = 336
-      const yCantidadOncehub2 = firstPage.getHeight() - 270
+      const yCantidadOncehub2 = firstPage.getHeight() - 256
       const xVrUnitarioOncehub2 = 417
-      const yVrUnitarioOncehub2 = firstPage.getHeight() - 270
+      const yVrUnitarioOncehub2 = firstPage.getHeight() - 256
       const xVrBrutoOncehub2 = 491
-      const yVrBrutoOncehub2 = firstPage.getHeight() - 270
+      const yVrBrutoOncehub2 = firstPage.getHeight() - 256
       const xVrTotalOncehub2 = 566
-      const yVrTotalOncehub2 = firstPage.getHeight() - 270
+      const yVrTotalOncehub2 = firstPage.getHeight() - 256
 
       // Tasa de cambio para ONCEHUB
       const xTasaCambioOncehub = 528
@@ -3752,9 +3749,13 @@ function App() {
       const mesActualEn = mesesEn[new Date().getMonth()]
       const mesActualEs = mesesEs[new Date().getMonth()]
       // Instancias 1 y 3 usan inglés, instancias 2 y 4 usan español
-      const nombreClienteConMes1 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+      const nombreClienteConMes1 = nombreCliente.includes('HEMMERSBACH')
+        ? `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEn}`
+        : `${clienteData.nombreClienteFinal}, ${mesActualEn}`
       const nombreClienteConMes2 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
-      const nombreClienteConMes3 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+      const nombreClienteConMes3 = nombreCliente.includes('HEMMERSBACH')
+        ? `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEn}`
+        : `${clienteData.nombreClienteFinal}, ${mesActualEn}`
       const nombreClienteConMes4 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
 
       // Hemmersbach: formato "HEMMERSBACH - {centroCosto} {Mes}"
@@ -3924,9 +3925,11 @@ function App() {
           const nombreMesEn1 = `${clienteData.nombreClienteFinal.toUpperCase()}- (${mesActualEn}) - ${nombreEmp1}`
           const nombreMesEs1 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
           firstPage.drawText(nombreMesEn1, { x: 135, y: firstPage.getHeight() - 224, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs1, { x: 175, y: firstPage.getHeight() - 234.6, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEn1, { x: 108, y: firstPage.getHeight() - 246, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs1, { x: 154, y: firstPage.getHeight() - 257.3, size: 6, font, color: rgb(0, 0, 0) })
+          // Instancia 2 (español) - OCULTA
+          // firstPage.drawText(nombreMesEs1, { x: 175, y: firstPage.getHeight() - 234.6, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn1, { x: 108, y: firstPage.getHeight() - 238.4, size: 6, font, color: rgb(0, 0, 0) })
+          // Instancia 4 (español) - OCULTA
+          // firstPage.drawText(nombreMesEs1, { x: 154, y: firstPage.getHeight() - 257.3, size: 6, font, color: rgb(0, 0, 0) })
         }
 
         // Tasa de cambio - ONCEHUB (valor único)
@@ -3963,10 +3966,12 @@ function App() {
           const nombreEmp2 = nombresEmpleados[String(emp2.employeeCode)] || clienteData.nombreClienteFinal
           const nombreMesEn2 = `${clienteData.nombreClienteFinal.toUpperCase()}- (${mesActualEn}) - ${nombreEmp2}`
           const nombreMesEs2 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
-          firstPage.drawText(nombreMesEn2, { x: 135, y: firstPage.getHeight() - 269, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs2, { x: 175, y: firstPage.getHeight() - 280, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEn2, { x: 108, y: firstPage.getHeight() - 291.7, size: 6, font, color: rgb(0, 0, 0) })
-          firstPage.drawText(nombreMesEs2, { x: 154, y: firstPage.getHeight() - 303, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn2, { x: 135, y: firstPage.getHeight() - 254.6, size: 6, font, color: rgb(0, 0, 0) })
+          // Instancia 6 (español) - OCULTA
+          // firstPage.drawText(nombreMesEs2, { x: 175, y: firstPage.getHeight() - 280, size: 6, font, color: rgb(0, 0, 0) })
+          firstPage.drawText(nombreMesEn2, { x: 108, y: firstPage.getHeight() - 269.4, size: 6, font, color: rgb(0, 0, 0) })
+          // Instancia 8 (español) - OCULTA
+          // firstPage.drawText(nombreMesEs2, { x: 154, y: firstPage.getHeight() - 303, size: 6, font, color: rgb(0, 0, 0) })
         }
       }
 
@@ -4058,9 +4063,8 @@ function App() {
           const xPais = 70
           const yPais = firstPage.getHeight() - 621
           
-          // Nombre cliente_2 - Instancias originales (NO para Hemmersbach ni ONCEHUB)
-          console.log('DEBUG INSTANCIAS: usarOncehub =', usarOncehub, '| usarHemmersbach =', usarHemmersbach, '| condicion =', (!usarHemmersbach && !usarOncehub))
-          if (!usarHemmersbach && !usarOncehub) {
+          // Nombre cliente_2 - Instancias originales (NO para ONCEHUB)
+          if (!usarOncehub) {
             // Instancia 1 (inglés)
             firstPage.drawText(nombreClienteConMes1, {
               x: usarDescuentos ? xNombreCliente2_1_descuentos : xNombreCliente2_1,
