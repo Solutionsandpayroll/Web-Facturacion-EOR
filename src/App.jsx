@@ -3602,22 +3602,22 @@ function App() {
       const tasaCambioTextSize = 9
 
       const xTasaCambio_2 = firstPage.getWidth() - exchangeRateWidth - 480
-      const yTasaCambio_2 = firstPage.getHeight() - 652
+      const yTasaCambio_2 = firstPage.getHeight() - 637
 
       const xTotalBruto = firstPage.getWidth() - totalBrutoWidth - 49
-      const yTotalBruto = firstPage.getHeight() - 535
+      const yTotalBruto = firstPage.getHeight() - 520
 
       const xTotalAPagar = firstPage.getWidth() - totalAPagarWidth - 49
-      const yTotalAPagar = firstPage.getHeight() - 571
+      const yTotalAPagar = firstPage.getHeight() - 556
 
       const xTotalAPagar_2 = firstPage.getWidth() - totalAPagarWidth - 250
-      const yTotalAPagar_2 = firstPage.getHeight() - 588
+      const yTotalAPagar_2 = firstPage.getHeight() - 573
 
       const xIvaServicios = firstPage.getWidth() - ivaServiciosWidth - 49
-      const yIvaServicios = firstPage.getHeight() - 553
+      const yIvaServicios = firstPage.getHeight() - 538
 
       const xValorEnLetras = 45
-      const yValorEnLetras = firstPage.getHeight() - 561
+      const yValorEnLetras = firstPage.getHeight() - 546
 
       const formattedFecha = fechaElaboracion
       const fechaWidth = font.widthOfTextAtSize(formattedFecha, 8.5)
@@ -3984,8 +3984,8 @@ function App() {
       const xFechaVencimiento = firstPage.getWidth() - fechaVencimientoWidth - 60
       const yFechaVencimiento = firstPage.getHeight() - 158
 
-      const xFechaVencimiento_2 = firstPage.getWidth() - fechaVencimientoWidth - 362
-      const yFechaVencimiento_2 = firstPage.getHeight() - 588
+      const xFechaVencimiento_2 = firstPage.getWidth() - fechaVencimientoWidth - 347
+      const yFechaVencimiento_2 = firstPage.getHeight() - 574
 
       const xConsecutivo = firstPage.getWidth() - consecutivoWidth - 102
       const yConsecutivo = firstPage.getHeight() - 90.5
@@ -3998,7 +3998,7 @@ function App() {
         color: rgb(0, 0, 0),
       })
 
-      firstPage.drawText(formattedFechaVencimiento + ' por', {
+      firstPage.drawText(formattedFechaVencimiento + ' for', {
         x: usarDescuentos ? xFechaVencimiento_2_descuentos : xFechaVencimiento_2,
         y: usarDescuentos ? yFechaVencimiento_2_descuentos : yFechaVencimiento_2,
         size: 6.5,
@@ -4044,19 +4044,19 @@ function App() {
           const yNombreCliente2_2 = firstPage.getHeight() - 241
           
           const xNombreCliente2_3 = 108
-          const yNombreCliente2_3 = firstPage.getHeight() - 253.6
+          const yNombreCliente2_3 = firstPage.getHeight() - 245.9
           
           const xNombreCliente2_4 = 154
           const yNombreCliente2_4 = firstPage.getHeight() - 265
           
           const xNombreCliente3 = 65
-          const yNombreCliente3 = firstPage.getHeight() - 628
+          const yNombreCliente3 = firstPage.getHeight() - 613
           
           const xMoneda = 74
-          const yMoneda = firstPage.getHeight() - 644
+          const yMoneda = firstPage.getHeight() - 629
           
           const xPais = 70
-          const yPais = firstPage.getHeight() - 636
+          const yPais = firstPage.getHeight() - 621
           
           // Nombre cliente_2 - Instancias originales (NO para Hemmersbach ni ONCEHUB)
           console.log('DEBUG INSTANCIAS: usarOncehub =', usarOncehub, '| usarHemmersbach =', usarHemmersbach, '| condicion =', (!usarHemmersbach && !usarOncehub))
@@ -4070,14 +4070,14 @@ function App() {
               color: rgb(0, 0, 0),
             })
 
-            // Instancia 2 (español)
-            firstPage.drawText(nombreClienteConMes2, {
-              x: usarDescuentos ? xNombreCliente2_2_descuentos : xNombreCliente2_2,
-              y: usarDescuentos ? yNombreCliente2_2_descuentos : yNombreCliente2_2,
-              size: clienteFontSize,
-              font,
-              color: rgb(0, 0, 0),
-            })
+            // Instancia 2 (español) - OCULTA
+            // firstPage.drawText(nombreClienteConMes2, {
+            //   x: usarDescuentos ? xNombreCliente2_2_descuentos : xNombreCliente2_2,
+            //   y: usarDescuentos ? yNombreCliente2_2_descuentos : yNombreCliente2_2,
+            //   size: clienteFontSize,
+            //   font,
+            //   color: rgb(0, 0, 0),
+            // })
 
             // Instancia 3 (inglés)
             firstPage.drawText(nombreClienteConMes3, {
@@ -4088,14 +4088,14 @@ function App() {
               color: rgb(0, 0, 0),
             })
 
-            // Instancia 4 (español)
-            firstPage.drawText(nombreClienteConMes4, {
-              x: usarDescuentos ? xNombreCliente2_4_descuentos : xNombreCliente2_4,
-              y: usarDescuentos ? yNombreCliente2_4_descuentos : yNombreCliente2_4,
-              size: clienteFontSize,
-              font,
-              color: rgb(0, 0, 0),
-            })
+            // Instancia 4 (español) - OCULTA
+            // firstPage.drawText(nombreClienteConMes4, {
+            //   x: usarDescuentos ? xNombreCliente2_4_descuentos : xNombreCliente2_4,
+            //   y: usarDescuentos ? yNombreCliente2_4_descuentos : yNombreCliente2_4,
+            //   size: clienteFontSize,
+            //   font,
+            //   color: rgb(0, 0, 0),
+            // })
           }
 
           // Hemmersbach: 4 instancias con centro de costo (solo si ES Hemmersbach)
