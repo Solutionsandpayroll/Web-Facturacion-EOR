@@ -371,13 +371,13 @@ function App() {
           SELECT consecutivo FROM proformas_config ORDER BY id DESC LIMIT 1
         `
         if (rows.length > 0) {
-          setConsecutivo(String(rows[0].consecutivo))
+          setConsecutivo(String(rows[0].consecutivo).padStart(3, '0'))
         } else {
-          setConsecutivo('1')
+          setConsecutivo('001')
         }
       } catch (err) {
         console.error('Error al cargar consecutivo:', err)
-        setConsecutivo('1')
+        setConsecutivo('001')
       }
     }
     loadConsecutivo()
@@ -3123,14 +3123,14 @@ function App() {
   }
 
   const numberToWords = (num, currency = 'USD') => {
-    const units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
-    const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve']
-    const tens = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
-    const hundreds = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+    const units = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+    const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen']
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+    const hundreds = ['', 'one hundred', 'two hundred', 'three hundred', 'four hundred', 'five hundred', 'six hundred', 'seven hundred', 'eight hundred', 'nine hundred']
 
     const convertHundreds = (n) => {
       if (n === 0) return ''
-      if (n === 100) return 'cien'
+      if (n === 100) return 'one hundred'
       
       let result = ''
       if (n >= 100) {
@@ -3140,16 +3140,10 @@ function App() {
       
       if (n >= 10 && n <= 19) {
         result += teens[n - 10]
-      } else if (n >= 20 && n <= 29) {
-        if (n === 20) {
-          result += 'veinte'
-        } else {
-          result += 'veinti' + units[n - 20]
-        }
       } else if (n >= 10 && n <= 99) {
         result += tens[Math.floor(n / 10)]
         if (n % 10 > 0) {
-          result += ' y ' + units[n % 10]
+          result += '-' + units[n % 10]
         }
       } else if (n < 10) {
         result += units[n]
@@ -3164,14 +3158,14 @@ function App() {
     let words = ''
     
     if (intPart === 0) {
-      words = 'cero'
+      words = 'zero'
     } else {
       if (intPart >= 1000000) {
         const millions = Math.floor(intPart / 1000000)
         if (millions === 1) {
-          words += 'un millón '
+          words += 'one million '
         } else {
-          words += convertHundreds(millions) + ' millones '
+          words += convertHundreds(millions) + ' millions '
         }
       }
       
@@ -3179,9 +3173,9 @@ function App() {
       if (remainder >= 1000) {
         const thousands = Math.floor(remainder / 1000)
         if (thousands === 1) {
-          words += 'mil '
+          words += 'one thousand '
         } else {
-          words += convertHundreds(thousands) + ' mil '
+          words += convertHundreds(thousands) + ' thousand '
         }
       }
       
@@ -3192,10 +3186,10 @@ function App() {
     }
 
     words = words.trim()
-    const centsText = decPart > 0 ? convertHundreds(decPart) : 'cero'
+    const centsText = decPart > 0 ? convertHundreds(decPart) : 'zero'
     
-    const currencyLabel = currency === 'COP' ? 'pesos m/cte' : 'Dólares Estadounidenses'
-    return `${words.charAt(0).toUpperCase() + words.slice(1)} ${currencyLabel} con ${centsText} cent.`
+    const currencyLabel = currency === 'COP' ? 'pesos m/cte' : 'US Dollars'
+    return `${words.charAt(0).toUpperCase() + words.slice(1)} ${currencyLabel} with ${centsText} cents.`
   }
 
   const generarProforma = async () => {
@@ -4401,7 +4395,7 @@ function App() {
           SET consecutivo = ${nuevoConsecutivo}, updated_at = CURRENT_TIMESTAMP
           WHERE id = (SELECT id FROM proformas_config ORDER BY id DESC LIMIT 1)
         `
-        setConsecutivo(String(nuevoConsecutivo))
+        setConsecutivo(String(nuevoConsecutivo).padStart(3, '0'))
       } catch (err) {
         console.error('Error al actualizar consecutivo:', err)
       }
