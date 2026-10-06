@@ -1,4 +1,4 @@
-﻿* {
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -578,9 +578,9 @@ input.select-input::placeholder {
   border-color: var(--primary);
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ---------------------------------------------------------------
    Tab Navigation
-═══════════════════════════════════════════════════════════════ */
+--------------------------------------------------------------- */
 .tab-nav {
   background: var(--surface);
   border-bottom: 2px solid var(--border);
@@ -626,9 +626,9 @@ input.select-input::placeholder {
   flex: 1;
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ---------------------------------------------------------------
    Glossary
-═══════════════════════════════════════════════════════════════ */
+--------------------------------------------------------------- */
 .admin-glossary {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -690,7 +690,7 @@ input.select-input::placeholder {
   margin: 0 1px;
 }
 
-/* Admin panel – Configuración de Clientes */
+/* Admin panel � Configuraci�n de Clientes */
 .admin-section {
   background: #f1f5f9;
   border-top: 1px solid var(--border);
@@ -1173,7 +1173,7 @@ input.select-input::placeholder {
     font-size: 0.8125rem;
   }
 
-  /* Animaciones más rápidas en móvil */
+  /* Animaciones m�s r�pidas en m�vil */
   .card,
   .help-section,
   .form-group,
@@ -1814,4 +1814,23 @@ input:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Dep�sito fields */
+.deposito-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-input-small {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.add-field-deposito {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }

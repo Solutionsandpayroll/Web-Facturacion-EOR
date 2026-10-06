@@ -11,35 +11,35 @@ const sql = neon(import.meta.env.VITE_DATABASE_URL)
 // Configuración por defecto (hardcoded como fallback y para el botón "Restablecer")
 // fee: '6%' = porcentaje, '120' = valor fijo; sin_usd = oculta bloque USD; es_liquidacion = usa conceptos de liquidación
 const DEFAULT_CONFIG_CLIENTES_GENERAL = {
-  'C1007 - NZD':               { fee: '6%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1024 - MKD':               { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1032 - FLEXCO':            { fee: '9%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1038 - ONCEHUB':           { fee: '100.84', iva: true,  banking: true,  sin_usd: false, es_liquidacion: true  },
-  'C1041 - EDRINGTON':         { fee: '5.5%',   iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1042 - EPDM':              { fee: '10%',    iva: false, banking: false, sin_usd: true,  es_liquidacion: false },
-  'C1043 - NEO':               { fee: '8%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1050 - HEMMERSBACH':       { fee: '10%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1051 - YONYOU':            { fee: '210',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
-  'C1052 - BUBBLE BPM INC':    { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1053 - GLOBAL EXPANSION':  { fee: '150',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
-  'C1055 - RIVERMATE':         { fee: '150',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false },
-  'C1037 - REMOFIRST':         { fee: '120',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
-  'C1029 - INSIDER':           { fee: '190',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: true  },
-  'C1036 - ACTION AD':         { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1056 - EUROPORTAGE':       { fee: '200',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false },
-  'C1022 - Root Capital':      { fee: '9%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false },
-  'C1058 - POC PHARMA':        { fee: '160',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false },
-  'C1059 - SIFFI':             { fee: '10%',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false },
-  'C1060 - BETTEBUNA':         { fee: '10%',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false },
+  'C1007 - NZD':               { fee: '6%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1024 - MKD':               { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1032 - FLEXCO':            { fee: '9%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1038 - ONCEHUB':           { fee: '100.84', iva: true,  banking: true,  sin_usd: false, es_liquidacion: true,  deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1041 - EDRINGTON':         { fee: '5.5%',   iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1042 - EPDM':              { fee: '10%',    iva: false, banking: false, sin_usd: true,  es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1043 - NEO':               { fee: '8%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1050 - HEMMERSBACH':       { fee: '10%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1051 - YONYOU':            { fee: '210',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1052 - BUBBLE BPM INC':    { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1053 - GLOBAL EXPANSION':  { fee: '150',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1055 - RIVERMATE':         { fee: '150',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1037 - REMOFIRST':         { fee: '120',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1029 - INSIDER':           { fee: '190',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: true,  deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1036 - ACTION AD':         { fee: '11%',    iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1056 - EUROPORTAGE':       { fee: '200',    iva: true,  banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1022 - Root Capital':      { fee: '9%',     iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1058 - POC PHARMA':        { fee: '160',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1059 - SIFFI':             { fee: '10%',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'C1060 - BETTEBUNA':         { fee: '10%',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
 }
 
 const DEFAULT_CONFIG_CLIENTES_COSTA_RICA = {
-  'CR010 - BIPO SANYl':        { fee: '135',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false },
-  'CR010 - BIPO CATL':         { fee: '135',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false },
-  'CR010 - BIPO DONCHENG':     { fee: '135',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false },
-  'CR018 - BUBBLE BPM INC':    { fee: '11%',    iva: false, banking: false, sin_usd: true,  es_liquidacion: false },
-  'CR009 - REMOFIRST INC':     { fee: '135',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false },
-  'CR017 - EUROPORTAGE':       { fee: '200',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false },
+  'CR010 - BIPO SANYl':        { fee: '135',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'CR010 - BIPO CATL':         { fee: '135',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'CR010 - BIPO DONCHENG':     { fee: '135',    iva: false, banking: true,  sin_usd: true,  es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'CR018 - BUBBLE BPM INC':    { fee: '11%',    iva: false, banking: false, sin_usd: true,  es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'CR009 - REMOFIRST INC':     { fee: '135',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
+  'CR017 - EUROPORTAGE':       { fee: '200',    iva: false, banking: true,  sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: null, deposito_valor_usd: null },
 }
 
 const DEFAULT_CONFIG_CLIENTES = {
@@ -246,7 +246,7 @@ function App() {
   const [resetting, setResetting] = useState(false)
   const [activeTab, setActiveTab] = useState('facturacion')
   const [showAddForm, setShowAddForm] = useState(false)
-  const [addForm, setAddForm] = useState({ code: '', fee: '10%', iva: false, banking: false, sin_usd: false, es_liquidacion: false })
+  const [addForm, setAddForm] = useState({ code: '', fee: '10%', iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: '', deposito_valor_usd: '' })
   const [addingClient, setAddingClient] = useState(false)
   const [remoSubclientes, setRemoSubclientes] = useState([])
   const [subclientesLoading, setSubclientesLoading] = useState(false)
@@ -330,13 +330,13 @@ function App() {
       const targetTable = getClientesTableByProcess(activeProcess)
       const rows = targetTable === 'clientes_config_costa_rica'
         ? await sql`
-            SELECT code, fee, iva, banking, sin_usd, es_liquidacion
+            SELECT code, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd
             FROM clientes_config_costa_rica
             WHERE activo = true
             ORDER BY code
           `
         : await sql`
-            SELECT code, fee, iva, banking, sin_usd, es_liquidacion
+            SELECT code, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd
             FROM clientes_config
             WHERE activo = true
             ORDER BY code
@@ -349,6 +349,10 @@ function App() {
           banking:       row.banking,
           sin_usd:       row.sin_usd,
           es_liquidacion: row.es_liquidacion,
+          deposito:      row.deposito,
+          deposito_modalidad: row.deposito_modalidad,
+          deposito_porcentaje: row.deposito_porcentaje,
+          deposito_valor_usd: row.deposito_valor_usd,
         }
       })
 
@@ -526,7 +530,11 @@ function App() {
               iva          = ${cfg.iva},
               banking      = ${cfg.banking},
               sin_usd      = ${cfg.sin_usd},
-              es_liquidacion = ${cfg.es_liquidacion}
+              es_liquidacion = ${cfg.es_liquidacion},
+              deposito = ${cfg.deposito},
+              deposito_modalidad = ${cfg.deposito_modalidad},
+              deposito_porcentaje = ${cfg.deposito_porcentaje},
+              deposito_valor_usd = ${cfg.deposito_valor_usd}
           WHERE code = ${code}
         `
       } else {
@@ -536,7 +544,11 @@ function App() {
               iva          = ${cfg.iva},
               banking      = ${cfg.banking},
               sin_usd      = ${cfg.sin_usd},
-              es_liquidacion = ${cfg.es_liquidacion}
+              es_liquidacion = ${cfg.es_liquidacion},
+              deposito = ${cfg.deposito},
+              deposito_modalidad = ${cfg.deposito_modalidad},
+              deposito_porcentaje = ${cfg.deposito_porcentaje},
+              deposito_valor_usd = ${cfg.deposito_valor_usd}
           WHERE code = ${code}
         `
       }
@@ -561,26 +573,34 @@ function App() {
       for (const [code, cfg] of Object.entries(defaultsByProcess)) {
         if (targetTable === 'clientes_config_costa_rica') {
           await sql`
-            INSERT INTO clientes_config_costa_rica (code, name, fee, iva, banking, sin_usd, es_liquidacion, activo)
-            VALUES (${code}, ${code}, ${cfg.fee}, ${cfg.iva}, ${cfg.banking}, ${cfg.sin_usd}, ${cfg.es_liquidacion}, true)
+            INSERT INTO clientes_config_costa_rica (code, name, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd, activo)
+            VALUES (${code}, ${code}, ${cfg.fee}, ${cfg.iva}, ${cfg.banking}, ${cfg.sin_usd}, ${cfg.es_liquidacion}, ${cfg.deposito}, ${cfg.deposito_modalidad}, ${cfg.deposito_porcentaje}, ${cfg.deposito_valor_usd}, true)
             ON CONFLICT (code) DO UPDATE
             SET fee            = EXCLUDED.fee,
                 iva            = EXCLUDED.iva,
                 banking        = EXCLUDED.banking,
                 sin_usd        = EXCLUDED.sin_usd,
                 es_liquidacion = EXCLUDED.es_liquidacion,
+                deposito = EXCLUDED.deposito,
+                deposito_modalidad = EXCLUDED.deposito_modalidad,
+                deposito_porcentaje = EXCLUDED.deposito_porcentaje,
+                deposito_valor_usd = EXCLUDED.deposito_valor_usd,
                 activo         = true
           `
         } else {
           await sql`
-            INSERT INTO clientes_config (code, name, fee, iva, banking, sin_usd, es_liquidacion, activo)
-            VALUES (${code}, ${code}, ${cfg.fee}, ${cfg.iva}, ${cfg.banking}, ${cfg.sin_usd}, ${cfg.es_liquidacion}, true)
+            INSERT INTO clientes_config (code, name, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd, activo)
+            VALUES (${code}, ${code}, ${cfg.fee}, ${cfg.iva}, ${cfg.banking}, ${cfg.sin_usd}, ${cfg.es_liquidacion}, ${cfg.deposito}, ${cfg.deposito_modalidad}, ${cfg.deposito_porcentaje}, ${cfg.deposito_valor_usd}, true)
             ON CONFLICT (code) DO UPDATE
             SET fee            = EXCLUDED.fee,
                 iva            = EXCLUDED.iva,
                 banking        = EXCLUDED.banking,
                 sin_usd        = EXCLUDED.sin_usd,
                 es_liquidacion = EXCLUDED.es_liquidacion,
+                deposito = EXCLUDED.deposito,
+                deposito_modalidad = EXCLUDED.deposito_modalidad,
+                deposito_porcentaje = EXCLUDED.deposito_porcentaje,
+                deposito_valor_usd = EXCLUDED.deposito_valor_usd,
                 activo         = true
           `
         }
@@ -607,17 +627,17 @@ function App() {
       const targetTable = getClientesTableByProcess(activeProcess)
       if (targetTable === 'clientes_config_costa_rica') {
         await sql`
-          INSERT INTO clientes_config_costa_rica (code, name, fee, iva, banking, sin_usd, es_liquidacion, activo)
-          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, true)
+          INSERT INTO clientes_config_costa_rica (code, name, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd, activo)
+          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, ${addForm.deposito}, ${addForm.deposito_modalidad}, ${addForm.deposito_porcentaje || null}, ${addForm.deposito_valor_usd || null}, true)
         `
       } else {
         await sql`
-          INSERT INTO clientes_config (code, name, fee, iva, banking, sin_usd, es_liquidacion, activo)
-          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, true)
+          INSERT INTO clientes_config (code, name, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd, activo)
+          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, ${addForm.deposito}, ${addForm.deposito_modalidad}, ${addForm.deposito_porcentaje || null}, ${addForm.deposito_valor_usd || null}, true)
         `
       }
       await loadConfig()
-      setAddForm({ code: '', fee: '10%', iva: false, banking: false, sin_usd: false, es_liquidacion: false })
+      setAddForm({ code: '', fee: '10%', iva: false, banking: false, sin_usd: false, es_liquidacion: false, deposito: false, deposito_modalidad: 'porcentaje', deposito_porcentaje: '', deposito_valor_usd: '' })
       setShowAddForm(false)
     } catch (err) {
       setConfigError(`Error al agregar cliente: ${err.message}`)
@@ -905,6 +925,7 @@ function App() {
         colFIng   = headerBase.indexOf('F_INGRESO')
         colFRet   = headerBase.indexOf('F_RETIRO')
         colSubcli = headerBase.indexOf('SUBCLIENTE')
+        const colSueldo = headerBase.indexOf('SUELDO')
 
         console.log('=== BASE DE EMPLEADOS ===')
         console.log('Encabezados encontrados:', headerBase)
@@ -946,6 +967,7 @@ function App() {
             fRetiro:  colFRet   !== -1 ? fila[colFRet]  ?? null : null,
             subcli:   subcliVal,
             clasif:   clasifVal,
+            sueldo:   colSueldo !== -1 ? fila[colSueldo] ?? null : null,
           })
         }
 
@@ -3111,6 +3133,222 @@ function App() {
 
       if (archivosGenerados === 0)
         throw new Error('No se encontraron empleados para ninguno de los clientes seleccionados. Verifica los archivos.')
+
+      // Generar archivos de depósitos para clientes con depósito activado
+      const parsePeriodo = (periodoStr) => {
+        const meses = {
+          'enero': 0, 'febrero': 1, 'marzo': 2, 'abril': 3, 'mayo': 4, 'junio': 5,
+          'julio': 6, 'agosto': 7, 'septiembre': 8, 'octubre': 9, 'noviembre': 10, 'diciembre': 11,
+          'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
+          'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
+        }
+        const lower = periodoStr.toLowerCase().trim()
+        for (const [nombre, mesIdx] of Object.entries(meses)) {
+          if (lower.includes(nombre)) {
+            const yearMatch = lower.match(/\b(19|20)\d{2}\b/)
+            if (yearMatch) {
+              return { mes: mesIdx, anio: parseInt(yearMatch[0]) }
+            }
+          }
+        }
+        const match = lower.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/)
+        if (match) {
+          return { mes: parseInt(match[1]) - 1, anio: parseInt(match[3]) }
+        }
+        return null
+      }
+
+      const periodoInfo = parsePeriodo(periodo)
+      
+      // Crear un Set con los códigos de empleado que están en el reporte Novasoft
+      const codigosNovaSet = new Set(codigosNova)
+      
+      for (const cliente of clientesSeleccionados) {
+        const cfg = clientesConfig[cliente] || DEFAULT_CONFIG_CLIENTES[cliente] || {}
+        if (!cfg.deposito) continue
+
+        const empleadosDeposito = []
+        for (const [codigo, empData] of mapaEmpleados.entries()) {
+          // Verificar que el empleado está en el reporte Novasoft
+          if (!codigosNovaSet.has(codigo)) continue
+
+          const cc = mapaCC.get(codigo)
+          if (cc !== cliente && !cc?.startsWith(cliente.split(' - ')[0])) continue
+
+          if (!empData.fIngreso || !periodoInfo) continue
+
+          let fechaIng
+          if (empData.fIngreso instanceof Date) {
+            fechaIng = empData.fIngreso
+          } else {
+            const fechaStr = String(empData.fIngreso).trim()
+            const match = fechaStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/)
+            if (match) {
+              fechaIng = new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]))
+            } else {
+              const parsed = new Date(fechaStr)
+              if (!isNaN(parsed.getTime())) fechaIng = parsed
+            }
+          }
+
+          if (!fechaIng) continue
+
+          if (fechaIng.getMonth() === periodoInfo.mes && fechaIng.getFullYear() === periodoInfo.anio) {
+            let valorDeposito = 0
+            const sueldoCOP = empData.sueldo ? parseFloat(String(empData.sueldo).replace(/[$,\s]/g, '')) : 0
+            const tasaCambioNum = parseFloat(String(tasaCambio).replace(/,/g, '.'))
+            const sueldoUSD = sueldoCOP > 0 && tasaCambioNum > 0 ? sueldoCOP / tasaCambioNum : 0
+
+            if (cfg.deposito_modalidad === 'porcentaje') {
+              const porcentaje = cfg.deposito_porcentaje ? parseFloat(cfg.deposito_porcentaje) : 0
+              valorDeposito = (sueldoUSD * porcentaje) / 100
+            } else if (cfg.deposito_modalidad === 'fijo') {
+              valorDeposito = cfg.deposito_valor_usd ? parseFloat(cfg.deposito_valor_usd) : 0
+            }
+
+            empleadosDeposito.push({
+              codigo,
+              nombre: empData.nombre,
+              fIngreso: empData.fIngreso instanceof Date 
+                ? empData.fIngreso.toLocaleDateString('es-CO')
+                : String(empData.fIngreso),
+              sueldo: sueldoUSD,
+              modalidad: cfg.deposito_modalidad,
+              porcentaje: cfg.deposito_modalidad === 'porcentaje' ? cfg.deposito_porcentaje : null,
+              valorDeposito
+            })
+          }
+        }
+
+        if (empleadosDeposito.length > 0) {
+          const tplResponse = await fetch('/Facturación EOR -Deposito (1).xlsx')
+          if (!tplResponse.ok) throw new Error('No se pudo cargar la plantilla de depósitos.')
+          const tplBuffer = await tplResponse.arrayBuffer()
+
+          const workbook = new ExcelJS.Workbook()
+          await workbook.xlsx.load(tplBuffer.slice(0))
+          const worksheet = workbook.worksheets[0]
+
+          const headerRow = worksheet.getRow(3)
+          let colEmpCode = -1, colRfWid = -1, colName = -1, colOnboard = -1
+          let colOffboard = -1, colStatus = -1, colCountry = -1, colPayMonth = -1
+          let colSvcType = -1, colTotalUsd = -1
+
+          headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            const val = String(cell.value ?? '').trim().toUpperCase()
+            if (val === 'EMPLOYEE CODE') colEmpCode = colNumber
+            if (val === 'EE RF WID') colRfWid = colNumber
+            if (val === 'NAME') colName = colNumber
+            if (val === 'ONBOARDING DATE') colOnboard = colNumber
+            if (val === 'OFFBOARDING DATE') colOffboard = colNumber
+            if (val === 'EE STATUS (ONBOARDING/ACTIVE/OFFBOARDING)') colStatus = colNumber
+            if (val === 'COUNTRY') colCountry = colNumber
+            if (val === 'PAYROLL MONTH') colPayMonth = colNumber
+            if (val === 'SERVICE TYPE / INVOICE TYPE') colSvcType = colNumber
+            if (val === 'TOTAL USD') colTotalUsd = colNumber
+          })
+
+          if (colEmpCode === -1 || colTotalUsd === -1) {
+            throw new Error('No se encontraron las columnas EMPLOYEE CODE o TOTAL USD en la plantilla de depósitos.')
+          }
+
+          // Encontrar la fila con la fórmula SUMA en la columna TOTAL USD
+          let filaSuma = -1
+          const colLetter = XLSX.utils.encode_col(colTotalUsd - 1)
+          for (let r = 1; r <= worksheet.rowCount; r++) {
+            const cell = worksheet.getCell(r, colTotalUsd)
+            if (cell.formula) {
+              filaSuma = r
+              break
+            }
+          }
+
+          if (filaSuma === -1) {
+            throw new Error('No se encontró la fila de totales con fórmula en la plantilla de depósitos.')
+          }
+
+          const numRegistros = empleadosDeposito.length
+          const filaInicioDatos = 4
+
+          // Si hay más registros que espacios disponibles, insertar filas antes de la fila de totales
+          const espaciosDisponibles = filaSuma - filaInicioDatos
+          if (numRegistros > espaciosDisponibles) {
+            const filasAInsertar = numRegistros - espaciosDisponibles
+            for (let i = 0; i < filasAInsertar; i++) {
+              worksheet.insertRow(filaSuma, {})
+            }
+          }
+
+          // Copiar formato de la fila de referencia (fila 4) a las filas de datos
+          const refRow = worksheet.getRow(filaInicioDatos)
+          const currentFilaSuma = filaInicioDatos + numRegistros
+          const MESES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December']
+          const mesActual = MESES_EN[new Date().getMonth()]
+          for (let r = filaInicioDatos; r < currentFilaSuma; r++) {
+            const targetRow = worksheet.getRow(r)
+            refRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+              const targetCell = targetRow.getCell(colNumber)
+              if (cell.style) {
+                targetCell.style = JSON.parse(JSON.stringify(cell.style))
+              }
+              if (cell.alignment) {
+                targetCell.alignment = { ...cell.alignment }
+              }
+              if (cell.font) {
+                targetCell.font = { ...cell.font }
+              }
+              if (cell.border) {
+                targetCell.border = JSON.parse(JSON.stringify(cell.border))
+              }
+              if (cell.fill) {
+                targetCell.fill = JSON.parse(JSON.stringify(cell.fill))
+              }
+              if (cell.numFmt) {
+                targetCell.numFmt = cell.numFmt
+              }
+            })
+            targetRow.height = refRow.height
+            targetRow.commit()
+          }
+
+          // Escribir los datos
+          let currentRow = filaInicioDatos
+          for (const emp of empleadosDeposito) {
+            const row = worksheet.getRow(currentRow)
+            if (colEmpCode !== -1) row.getCell(colEmpCode).value = emp.codigo
+            if (colRfWid !== -1) row.getCell(colRfWid).value = ''
+            if (colName !== -1) row.getCell(colName).value = emp.nombre
+            if (colOnboard !== -1) row.getCell(colOnboard).value = emp.fIngreso
+            if (colOffboard !== -1) row.getCell(colOffboard).value = ''
+            if (colStatus !== -1) row.getCell(colStatus).value = 'onboarding'
+            if (colCountry !== -1) row.getCell(colCountry).value = 'Colombia'
+            if (colPayMonth !== -1) row.getCell(colPayMonth).value = mesActual
+            if (colSvcType !== -1) row.getCell(colSvcType).value = 'Deposit'
+            if (colTotalUsd !== -1) row.getCell(colTotalUsd).value = emp.valorDeposito
+            row.commit()
+            currentRow++
+          }
+
+          // Actualizar la fórmula SUMA en la fila de totales (ahora movida)
+          const sumaCell = worksheet.getCell(currentRow, colTotalUsd)
+          sumaCell.value = { formula: `SUM(${colLetter}${filaInicioDatos}:${colLetter}${currentRow - 1})`, result: 0 }
+
+          const buffer = await workbook.xlsx.writeBuffer()
+          const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          const clienteLimpio = cliente.replace(/[\/\?%*:|"<>]/g, '-')
+          const periodoLimpio = periodo.trim().replace(/[\/\?%*:|"<>]/g, '-')
+          a.download = `Depósitos - ${clienteLimpio} - ${periodoLimpio}.xlsx`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+          archivosGenerados++
+          await new Promise(r => setTimeout(r, 400))
+        }
+      }
 
       setExitoCount(archivosGenerados)
       setTimeout(() => setExitoCount(0), 5000)
@@ -5696,7 +5934,43 @@ function App() {
                       <input type="checkbox" checked={addForm.es_liquidacion} onChange={e => setAddForm(f => ({ ...f, es_liquidacion: e.target.checked }))} />
                       Es Liquidación
                     </label>
+                    <label className="add-check-label">
+                      <input type="checkbox" checked={addForm.deposito} onChange={e => setAddForm(f => ({ ...f, deposito: e.target.checked }))} />
+                      Depósito
+                    </label>
                   </div>
+                  {addForm.deposito && (
+                    <div className="add-field add-field-deposito">
+                      <label>Modalidad de depósito</label>
+                      <select
+                        className="admin-input"
+                        value={addForm.deposito_modalidad}
+                        onChange={e => setAddForm(f => ({ ...f, deposito_modalidad: e.target.value }))}
+                      >
+                        <option value="porcentaje">Porcentaje sobre salario</option>
+                        <option value="fijo">Valor fijo en USD</option>
+                      </select>
+                      {addForm.deposito_modalidad === 'porcentaje' ? (
+                        <input
+                          className="admin-input"
+                          type="number"
+                          step="0.01"
+                          placeholder="Ej: 50"
+                          value={addForm.deposito_porcentaje}
+                          onChange={e => setAddForm(f => ({ ...f, deposito_porcentaje: e.target.value }))}
+                        />
+                      ) : (
+                        <input
+                          className="admin-input"
+                          type="number"
+                          step="0.01"
+                          placeholder="Ej: 500"
+                          value={addForm.deposito_valor_usd}
+                          onChange={e => setAddForm(f => ({ ...f, deposito_valor_usd: e.target.value }))}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="add-client-actions">
                   <button
@@ -5730,6 +6004,7 @@ function App() {
                       <th>Banking Tax</th>
                       <th>Sin USD</th>
                       <th>Es Liquidación</th>
+                      <th>Depósito</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
@@ -5763,6 +6038,42 @@ function App() {
                               <td className="col-bool">
                                 <input type="checkbox" checked={editForm.es_liquidacion} onChange={e => setEditForm(f => ({ ...f, es_liquidacion: e.target.checked }))} />
                               </td>
+                              <td className="col-bool">
+                                <input type="checkbox" checked={editForm.deposito} onChange={e => setEditForm(f => ({ ...f, deposito: e.target.checked }))} />
+                              </td>
+                              <td>
+                                {editForm.deposito && (
+                                  <div className="deposito-edit-fields">
+                                    <select
+                                      className="admin-input admin-input-small"
+                                      value={editForm.deposito_modalidad}
+                                      onChange={e => setEditForm(f => ({ ...f, deposito_modalidad: e.target.value }))}
+                                    >
+                                      <option value="porcentaje">% Salario</option>
+                                      <option value="fijo">USD Fijo</option>
+                                    </select>
+                                    {editForm.deposito_modalidad === 'porcentaje' ? (
+                                      <input
+                                        className="admin-input admin-input-small"
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="%"
+                                        value={editForm.deposito_porcentaje}
+                                        onChange={e => setEditForm(f => ({ ...f, deposito_porcentaje: e.target.value }))}
+                                      />
+                                    ) : (
+                                      <input
+                                        className="admin-input admin-input-small"
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="USD"
+                                        value={editForm.deposito_valor_usd}
+                                        onChange={e => setEditForm(f => ({ ...f, deposito_valor_usd: e.target.value }))}
+                                      />
+                                    )}
+                                  </div>
+                                )}
+                              </td>
                               <td className="col-actions">
                                 <button
                                   className="btn-save-row"
@@ -5783,12 +6094,13 @@ function App() {
                               <td className="col-bool">{cfg.banking ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
                               <td className="col-bool">{cfg.sin_usd ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
                               <td className="col-bool">{cfg.es_liquidacion ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
+                              <td className="col-bool">{cfg.deposito ? <span className="dot dot-on"/> : <span className="dot dot-off"/>}</td>
                               <td className="col-actions">
                                 <button
                                   className="btn-edit-row"
                                   onClick={() => {
                                     setEditando(code)
-                                    setEditForm({ fee: cfg.fee, iva: !!cfg.iva, banking: !!cfg.banking, sin_usd: !!cfg.sin_usd, es_liquidacion: !!cfg.es_liquidacion })
+                                    setEditForm({ fee: cfg.fee, iva: !!cfg.iva, banking: !!cfg.banking, sin_usd: !!cfg.sin_usd, es_liquidacion: !!cfg.es_liquidacion, deposito: !!cfg.deposito, deposito_modalidad: cfg.deposito_modalidad || 'porcentaje', deposito_porcentaje: cfg.deposito_porcentaje || '', deposito_valor_usd: cfg.deposito_valor_usd || '' })
                                   }}
                                 >
                                   Editar
