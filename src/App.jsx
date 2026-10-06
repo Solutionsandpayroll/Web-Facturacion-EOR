@@ -3381,6 +3381,60 @@ function App() {
         return evaluateExpression(expr, currentRow)
       }
 
+      // Función para detectar secciones con encabezados TOTALES y sumar sus valores
+      const detectarSeccionesTotales = () => {
+        const secciones = []
+        
+        // Buscar todas las filas que contengan los encabezados
+        const headerRows = []
+        for (let i = 0; i < formulaData.length; i++) {
+          const row = formulaData[i]
+          if (row && row.includes('TOTAL EMPLOYEE COST USD')) {
+            headerRows.push(i)
+          }
+        }
+        
+        // Para cada sección, obtener los valores de la última fila con datos
+        headerRows.forEach((headerIdx, sectionNum) => {
+          const nextHeaderIdx = sectionNum < headerRows.length - 1 ? headerRows[sectionNum + 1] : formulaData.length
+          
+          // Buscar la última fila con valores (cualquier valor no nulo y no vacío)
+          let totalRow = null
+          for (let i = nextHeaderIdx - 1; i > headerIdx; i--) {
+            const row = formulaData[i]
+            if (row && row.length > 0 && row.some(cell => {
+              if (cell === null || cell === undefined || cell === '') return false
+              const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+              return !isNaN(num) && num !== 0
+            })) {
+              totalRow = i
+              break
+            }
+          }
+          
+          if (totalRow !== null) {
+            const row = formulaData[totalRow]
+            const headers = formulaData[headerIdx]
+            
+            const getColValue = (colName) => {
+              const colIdx = headers.indexOf(colName)
+              if (colIdx === -1 || !row[colIdx]) return 0
+              const cell = row[colIdx]
+              return typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, '')) || 0
+            }
+            
+            secciones.push({
+              totalEmpCostUsd: getColValue('TOTAL EMPLOYEE COST USD'),
+              feeUsd: getColValue('FEE USD'),
+              vat: getColValue('VAT'),
+              totalUsd: getColValue('TOTAL USD'),
+            })
+          }
+        })
+        
+        return secciones
+      }
+
       const evaluateExpression = (expr, currentRow) => {
         expr = expr.replace(/([A-Z]+\d+)/g, (match) => {
           const ref = parseCellRef(match)
@@ -3476,6 +3530,21 @@ function App() {
             }
           }
         }
+      }
+
+      // Detectar secciones con encabezados TOTALES y sumar valores
+      console.log('DEBUG formulaData length:', formulaData.length)
+      console.log('DEBUG formulaData[2] length:', formulaData[2]?.length)
+      console.log('DEBUG TOTAL EMPLOYEE COST USD en sección 1:', formulaData[2]?.indexOf('TOTAL EMPLOYEE COST USD'))
+      console.log('DEBUG TOTAL EMPLOYEE COST USD en sección 2:', formulaData[170]?.indexOf('TOTAL EMPLOYEE COST USD'))
+      const seccionesTotales = detectarSeccionesTotales()
+      console.log('DEBUG SECCIONES:', JSON.stringify(seccionesTotales))
+      if (seccionesTotales.length > 1) {
+        // Hay múltiples secciones, sumar los valores
+        lastValue = seccionesTotales.reduce((sum, sec) => sum + sec.totalEmpCostUsd, 0)
+        lastFeeUsd = seccionesTotales.reduce((sum, sec) => sum + sec.feeUsd, 0)
+        lastVat = seccionesTotales.reduce((sum, sec) => sum + sec.vat, 0)
+        console.log('DEBUG SUMADOS:', { lastValue, lastFeeUsd, lastVat })
       }
 
       // Buscar "Comercial Discount" en el Excel usando datos con fórmulas evaluadas
@@ -4400,17 +4469,6 @@ function App() {
         console.error('Error al actualizar consecutivo:', err)
       }
     }
-      const nuevoConsecutivo = parseInt(consecutivo) + 1
-      try {
-        await sql`
-          UPDATE proformas_config 
-          SET consecutivo = ${nuevoConsecutivo}, updated_at = CURRENT_TIMESTAMP
-          WHERE id = (SELECT id FROM proformas_config ORDER BY id DESC LIMIT 1)
-        `
-        setConsecutivo(String(nuevoConsecutivo))
-      } catch (err) {
-        console.error('Error al actualizar consecutivo:', err)
-      }
 
       setGenerandoProforma(false)
     }

@@ -101,7 +101,7 @@ export default async function handler(req, res) {
 
     const info = await transporter.sendMail({
       from: '"Solutions & Payroll" <noreply@solutionsandpayroll.com>',
-      to: 'automatizacion2@solutionsandpayroll.com',
+      to: 'ypena@solutionsandpayroll.com, vguzman@solutionsandpayroll.com',
       subject: 'Nueva Proforma',
       html: htmlContent,
       attachments: [
