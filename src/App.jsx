@@ -206,6 +206,8 @@ function App() {
   const [dragHealth, setDragHealth] = useState(false)
   const [dragCodes, setDragCodes] = useState(false)
   const [archivoFacturacion, setArchivoFacturacion] = useState(null)
+  const [trmManual, setTrmManual] = useState('')
+  const [requiereTrm, setRequiereTrm] = useState(false)
   const [dragFacturacion, setDragFacturacion] = useState(false)
   const [generandoProforma, setGenerandoProforma] = useState(false)
   const [errorProforma, setErrorProforma] = useState(null)
@@ -371,12 +373,17 @@ function App() {
   useEffect(() => {
     const loadConsecutivo = async () => {
       try {
+        const procesoActual = activeProcess === 'costa-rica' ? 'costa-rica' : 'general'
         const rows = await sql`
-          SELECT consecutivo FROM proformas_config ORDER BY id DESC LIMIT 1
+          SELECT consecutivo FROM proformas_config WHERE proceso = ${procesoActual} ORDER BY id DESC LIMIT 1
         `
         if (rows.length > 0) {
           setConsecutivo(String(rows[0].consecutivo).padStart(3, '0'))
         } else {
+          // Crear registro inicial para este proceso
+          await sql`
+            INSERT INTO proformas_config (consecutivo, proceso) VALUES (1, ${procesoActual})
+          `
           setConsecutivo('001')
         }
       } catch (err) {
@@ -385,7 +392,7 @@ function App() {
       }
     }
     loadConsecutivo()
-  }, [])
+  }, [activeProcess])
 
   useEffect(() => {
     if (!fechaElaboracion) {
@@ -394,43 +401,72 @@ function App() {
     }
     const [yyyy, mm, dd] = fechaElaboracion.split('-').map(Number)
     const fecha = new Date(yyyy, mm - 1, dd)
-    const dia = fecha.getDate()
     let fechaVenc
-    if (dia < 20) {
-      fechaVenc = new Date(yyyy, mm - 1, 20)
-    } else {
+    if (activeProcess === 'costa-rica') {
+      // Costa Rica: siempre 1 día después
       fechaVenc = new Date(yyyy, mm - 1, dd)
       fechaVenc.setDate(fechaVenc.getDate() + 1)
+    } else {
+      // General: lógica actual
+      const dia = fecha.getDate()
+      if (dia < 20) {
+        fechaVenc = new Date(yyyy, mm - 1, 20)
+      } else {
+        fechaVenc = new Date(yyyy, mm - 1, dd)
+        fechaVenc.setDate(fechaVenc.getDate() + 1)
+      }
     }
     const yyyy2 = fechaVenc.getFullYear()
     const mm2 = String(fechaVenc.getMonth() + 1).padStart(2, '0')
     const dd2 = String(fechaVenc.getDate()).padStart(2, '0')
     setFechaVencimiento(`${yyyy2}-${mm2}-${dd2}`)
-  }, [fechaElaboracion])
+  }, [fechaElaboracion, activeProcess])
 
   useEffect(() => {
     const loadClientesEOR = async () => {
       try {
-        const response = await fetch('/Clientes EOR.xlsx')
+        let filePath = '/Clientes EOR.xlsx'
+        let sheetName = null
+        let startCol = 1
+
+        if (activeProcess === 'costa-rica') {
+          filePath = '/Prorrogas Otros Paises/Clientes otros paises.xlsx'
+          sheetName = 'COSTA RICA'
+          startCol = 0
+        }
+
+        const response = await fetch(filePath)
         const arrayBuffer = await response.arrayBuffer()
         const workbook = XLSX.read(arrayBuffer, { type: 'array' })
-        const sheetName = workbook.SheetNames[0]
-        const sheet = workbook.Sheets[sheetName]
+        const sn = sheetName || workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sn]
         const data = XLSX.utils.sheet_to_json(sheet, { header: 1 })
         
         const clientes = []
         for (let i = 1; i < data.length; i++) {
           const row = data[i]
-          if (row && row[1]) {
-            clientes.push({
-              nombreTercero: row[1] || '',
-              identificacion: row[2] || '',
-              direccion: row[3] || '',
-              ciudad: row[4] || '',
-              telefono: row[5] || '',
-              monedaFacturacion: row[6] || '',
-              nombreClienteFinal: row[9] || '',
-            })
+          if (row && row[startCol]) {
+            if (activeProcess === 'costa-rica') {
+              clientes.push({
+                nombreTercero: row[startCol + 1] || '',
+                identificacion: row[startCol + 2] || '',
+                direccion: row[startCol + 3] || '',
+                ciudad: row[startCol + 4] || '',
+                telefono: row[startCol + 5] || '',
+                monedaFacturacion: row[startCol + 6] || '',
+                nombreClienteFinal: row[startCol + 9] || '',
+              })
+            } else {
+              clientes.push({
+                nombreTercero: row[1] || '',
+                identificacion: row[2] || '',
+                direccion: row[3] || '',
+                ciudad: row[4] || '',
+                telefono: row[5] || '',
+                monedaFacturacion: row[6] || '',
+                nombreClienteFinal: row[9] || '',
+              })
+            }
           }
         }
         setClientesEOR(clientes)
@@ -439,7 +475,7 @@ function App() {
       }
     }
     loadClientesEOR()
-  }, [])
+  }, [activeProcess])
 
   const loadRemoSubclientes = useCallback(async () => {
     if (activeProcess !== 'costa-rica') {
@@ -876,7 +912,52 @@ function App() {
 
   const handleFileChange = (e, setter) => {
     const file = e.target.files[0]
-    if (file) setter(file)
+    if (file) {
+      setter(file)
+      // Detectar si el archivo requiere TRM (EXCHANGE RATE = 1) para Costa Rica
+      if (activeProcess === 'costa-rica' && setter === setArchivoFacturacion) {
+        detectarRequiereTrm(file)
+      }
+    }
+  }
+
+  const detectarRequiereTrm = async (file) => {
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array', cellFormula: true })
+      const sheetName = wb.SheetNames[0]
+      const sheet = wb.Sheets[sheetName]
+      const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' })
+      
+      // Buscar la columna EXCHANGE RATE en los encabezados (fila 2)
+      const headers = (data[2] || []).map(h => String(h ?? '').trim().toUpperCase())
+      const colExchangeRate = headers.indexOf('EXCHANGE RATE')
+      
+      if (colExchangeRate === -1) {
+        setRequiereTrm(false)
+        return
+      }
+      
+      // Verificar si hay algún registro con EXCHANGE RATE = 1
+      let tieneTasaUno = false
+      for (let i = 3; i < data.length; i++) {
+        const row = data[i]
+        const cell = row[colExchangeRate]
+        if (cell !== null && cell !== undefined && cell !== '') {
+          const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+          if (!isNaN(num) && num === 1) {
+            tieneTasaUno = true
+            break
+          }
+        }
+      }
+      
+      setRequiereTrm(tieneTasaUno)
+      if (!tieneTasaUno) setTrmManual('')
+    } catch (err) {
+      console.error('Error al detectar TRM:', err)
+      setRequiereTrm(false)
+    }
   }
 
   const generar = async () => {
@@ -3426,7 +3507,7 @@ function App() {
     words = words.trim()
     const centsText = decPart > 0 ? convertHundreds(decPart) : 'zero'
     
-    const currencyLabel = currency === 'COP' ? 'pesos m/cte' : 'US Dollars'
+    const currencyLabel = currency === 'COP' ? 'pesos m/cte' : (currency === 'CRC' ? 'colones' : 'US Dollars')
     return `${words.charAt(0).toUpperCase() + words.slice(1)} ${currencyLabel} with ${centsText} cents.`
   }
 
@@ -3465,6 +3546,11 @@ function App() {
 
     if (!archivoFacturacion) {
       setErrorProforma('Sube el archivo de facturación.')
+      return
+    }
+
+    if (activeProcess === 'costa-rica' && requiereTrm && !trmManual.trim()) {
+      setErrorProforma('Ingresa la TRM.')
       return
     }
 
@@ -3510,7 +3596,15 @@ function App() {
       let usarHemmersbach = false
       let usarOncehub = false
 
-      if (nombreCliente.includes('ONCEHUB')) {
+      if (activeProcess === 'costa-rica') {
+        if (nombreCliente.includes('REMOFIRST') || nombreCliente.includes('CR009')) {
+          pdfPath = '/Prorrogas Otros Paises/Proforma Costa Rica Remofirst.pdf'
+        } else if (nombreCliente.includes('RIVERMATE')) {
+          pdfPath = '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf'
+        } else {
+          pdfPath = '/Prorrogas Otros Paises/Proforma Costa Rica Blanco.pdf'
+        }
+      } else if (nombreCliente.includes('ONCEHUB')) {
         pdfPath = '/Proforma Oncehub.pdf'
         usarOncehub = true
       } else if (nombreCliente.includes('EPDM') || nombreCliente.includes('RIVERMATE')) {
@@ -3704,6 +3798,16 @@ function App() {
         }
       }
 
+      // Buscar la fila de sumatoria (TOTALES) para Costa Rica
+      let filaSumatoria = -1
+      for (let i = formulaData.length - 1; i >= 3; i--) {
+        const row = formulaData[i]
+        if (row && row.some(cell => String(cell ?? '').trim().toUpperCase() === 'TOTALES')) {
+          filaSumatoria = i
+          break
+        }
+      }
+
       let lastValue = null
       // Buscar el último valor real de la columna usando formulaData (SheetJS con fórmulas evaluadas)
       for (let i = formulaData.length - 1; i >= 3; i--) {
@@ -3722,6 +3826,18 @@ function App() {
         throw new Error('No se encontró ningún valor en la columna "TOTAL EMPLOYEE COST USD".')
       }
 
+      // Si hay fila de sumatoria, usar sus valores
+      if (filaSumatoria !== -1 && activeProcess === 'costa-rica') {
+        const filaSum = formulaData[filaSumatoria]
+        const cellSum = filaSum[colTotalEmpCostUsd - 1]
+        if (cellSum !== null && cellSum !== undefined && cellSum !== '') {
+          const numSum = typeof cellSum === 'number' ? cellSum : parseFloat(String(cellSum).replace(/[$,]/g, ''))
+          if (!isNaN(numSum) && numSum !== 0) {
+            lastValue = numSum
+          }
+        }
+      }
+
       // Buscar el último valor real de la columna (usando datos con fórmulas evaluadas)
       let ultimoValorReal = null
       for (let i = 3; i < formulaData.length; i++) {
@@ -3734,7 +3850,7 @@ function App() {
           }
         }
       }
-      if (ultimoValorReal !== null) {
+      if (ultimoValorReal !== null && activeProcess !== 'costa-rica') {
         lastValue = ultimoValorReal
       }
 
@@ -3753,6 +3869,36 @@ function App() {
       if (lastFeeUsd === null) {
         throw new Error('No se encontró ningún valor en la columna "FEE USD".')
       }
+
+      // Si hay fila de sumatoria, usar sus valores para Costa Rica
+      if (filaSumatoria !== -1 && activeProcess === 'costa-rica') {
+        const filaSum = formulaData[filaSumatoria]
+        const cellFeeSum = filaSum[colFeeUsd - 1]
+        if (cellFeeSum !== null && cellFeeSum !== undefined && cellFeeSum !== '') {
+          const numFeeSum = typeof cellFeeSum === 'number' ? cellFeeSum : parseFloat(String(cellFeeSum).replace(/[$,]/g, ''))
+          if (!isNaN(numFeeSum) && numFeeSum !== 0) {
+            lastFeeUsd = numFeeSum
+          }
+        }
+      }
+
+      // Obtener valor de Banking Tax (para Rivermate)
+      const colBankingTax = headerMap['BANKING TAX']
+      let bankingTaxValue = null
+      if (colBankingTax) {
+        for (let i = formulaData.length - 1; i >= 3; i--) {
+          const row = formulaData[i]
+          const cell = row[colBankingTax - 1]
+          if (cell !== null && cell !== undefined && cell !== '') {
+            const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+            if (!isNaN(num) && num !== 0) {
+              bankingTaxValue = num
+              break
+            }
+          }
+        }
+      }
+      const formattedBankingTax = bankingTaxValue !== null ? bankingTaxValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
 
       // Buscar si existe la columna VAT y calcular el VAT adicional
       const colVat = headerMap['VAT']
@@ -3818,22 +3964,27 @@ function App() {
       }
 
       let lastExchangeRate = null
-      // Solo buscar Exchange Rate si no es Proforma Moneda COP
-      if (pdfPath !== '/Proforma Moneda COP.pdf') {
-        // Buscar usando formulaData (SheetJS con fórmulas evaluadas)
-        for (let i = formulaData.length - 1; i >= 3; i--) {
-          const row = formulaData[i]
-          const cell = row[colExchangeRate - 1] // colExchangeRate es 1-based
-          if (cell !== null && cell !== undefined && cell !== '') {
-            const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
-            if (!isNaN(num) && num !== 0) {
-              lastExchangeRate = num
-              break
+      // Si hay TRM manual ingresada, usar esa
+      if (activeProcess === 'costa-rica' && parseFloat(trmManual) > 0) {
+        lastExchangeRate = parseFloat(trmManual)
+      } else {
+        // Solo buscar Exchange Rate si no es Proforma Moneda COP ni Proforma Costa Rica Rivermate
+        if (pdfPath !== '/Proforma Moneda COP.pdf' && pdfPath !== '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf') {
+          // Buscar usando formulaData (SheetJS con fórmulas evaluadas)
+          for (let i = formulaData.length - 1; i >= 3; i--) {
+            const row = formulaData[i]
+            const cell = row[colExchangeRate - 1] // colExchangeRate es 1-based
+            if (cell !== null && cell !== undefined && cell !== '') {
+              const num = typeof cell === 'number' ? cell : parseFloat(String(cell).replace(/[$,]/g, ''))
+              if (!isNaN(num) && num !== 0) {
+                lastExchangeRate = num
+                break
+              }
             }
           }
-        }
-        if (lastExchangeRate === null) {
-          throw new Error('No se encontró ningún valor en la columna "EXCHANGE RATE".')
+          if (lastExchangeRate === null) {
+            throw new Error('No se encontró ningún valor en la columna "EXCHANGE RATE".')
+          }
         }
       }
 
@@ -3848,6 +3999,26 @@ function App() {
       const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
       const formattedValue = lastValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const formattedFeeUsd = lastFeeUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      
+      // Variables independientes para Costa Rica (sin división 1.19)
+      const feeUsdCr = lastFeeUsd
+      const formattedFeeUsdCr = feeUsdCr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const totalBrutoCr = lastValue + feeUsdCr
+      const formattedTotalBrutoCr = totalBrutoCr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const totalAPagarCr = lastValue + lastFeeUsd
+      const formattedTotalAPagarCr = totalAPagarCr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+      // Variables para Rivermate (incluye Banking Tax)
+      const totalBrutoCr_rivermate = bankingTaxValue !== null ? lastValue + feeUsdCr + bankingTaxValue : totalBrutoCr
+      const formattedTotalBrutoCr_rivermate = totalBrutoCr_rivermate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const totalAPagarCr_rivermate = bankingTaxValue !== null ? lastValue + lastFeeUsd + bankingTaxValue : totalAPagarCr
+      const formattedTotalAPagarCr_rivermate = totalAPagarCr_rivermate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const ivaServiciosCr = totalAPagarCr - totalBrutoCr
+      const formattedIvaServiciosCr = ivaServiciosCr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const valorEnLetrasCr = numberToWords(totalAPagarCr, 'USD')
+      const valorEnLetrasCr_rivermate = numberToWords(lastValue + lastFeeUsd, 'CRC')
+
+      // Variables para General (con división 1.19)
       const feeUsdDivided = lastFeeUsd / 1.19
       const formattedFeeUsdDivided = feeUsdDivided.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       const formattedExchangeRate = lastExchangeRate !== null ? lastExchangeRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
@@ -3878,10 +4049,15 @@ function App() {
       const cantidadWidth = font.widthOfTextAtSize('1.00', textSize)
       const feeUsdWidth = font.widthOfTextAtSize(formattedFeeUsd, textSize)
       const feeUsdDividedWidth = font.widthOfTextAtSize(formattedFeeUsdDivided, textSize)
+      const feeUsdCrWidth = font.widthOfTextAtSize(formattedFeeUsdCr, textSize)
       const exchangeRateWidth = formattedExchangeRate.length > 0 ? font.widthOfTextAtSize(formattedExchangeRate, textSize) : 0
       const totalBrutoWidth = font.widthOfTextAtSize(formattedTotalBruto, textSize)
+      const totalBrutoCrWidth = font.widthOfTextAtSize(formattedTotalBrutoCr, textSize)
       const totalAPagarWidth = font.widthOfTextAtSize(formattedTotalAPagar, textSize)
+      const totalAPagarCrWidth = font.widthOfTextAtSize(formattedTotalAPagarCr, textSize)
       const ivaServiciosWidth = font.widthOfTextAtSize(formattedIvaServicios, textSize)
+      const ivaServiciosCrWidth = font.widthOfTextAtSize(formattedIvaServiciosCr, textSize)
+      const valueWidth = font.widthOfTextAtSize(formattedValue, textSize)
 
       const xVrTotal = firstPage.getWidth() - textWidth - 50
       const xVrBruto = firstPage.getWidth() - textWidth - 126
@@ -3891,9 +4067,55 @@ function App() {
 
       const xVrTotal_2 = firstPage.getWidth() - feeUsdWidth - 50
       const y_2 = firstPage.getHeight() - 250
+
+      // Posiciones para Costa Rica - Línea 1
+      const xVrBrutoCr = firstPage.getWidth() - valueWidth - 126
+      const xVrUnitarioCr = firstPage.getWidth() - valueWidth - 204
+      const xTotalBrutoCr = firstPage.getWidth() - totalBrutoCrWidth - 49
+      const xTotalAPagarCr = firstPage.getWidth() - totalAPagarCrWidth - 49
+      const xIvaServiciosCr = firstPage.getWidth() - ivaServiciosCrWidth - 49
       const xVrUnitario_2 = firstPage.getWidth() - feeUsdDividedWidth - 204
       const xVrBruto_2 = firstPage.getWidth() - feeUsdDividedWidth - 126
       const xCantidad_2 = firstPage.getWidth() - cantidadWidth - 282
+
+      // Posiciones para Costa Rica - Línea 2
+      const xVrUnitarioCr_2 = firstPage.getWidth() - feeUsdCrWidth - 204
+      const xVrBrutoCr_2 = firstPage.getWidth() - feeUsdCrWidth - 126
+      const xTotalBrutoCr_2 = firstPage.getWidth() - totalBrutoCrWidth - 49
+      const xVrTotalCr = firstPage.getWidth() - textWidth - 50
+      const xVrTotalCr_2 = firstPage.getWidth() - feeUsdCrWidth - 50
+      const xCantidadCr = firstPage.getWidth() - cantidadWidth - 282
+      const xCantidadCr_2 = firstPage.getWidth() - cantidadWidth - 282
+
+      // Posiciones para Rivermate
+      const xTotalBrutoCr_rivermate = firstPage.getWidth() - totalBrutoCrWidth - 49
+      const xTotalAPagarCr_rivermate = firstPage.getWidth() - totalAPagarCrWidth - 49
+      const totalBrutoCrRivermateWidth = font.widthOfTextAtSize(formattedTotalBrutoCr_rivermate, textSize)
+      const totalAPagarCrRivermateWidth = font.widthOfTextAtSize(formattedTotalAPagarCr_rivermate, textSize)
+      const xTotalBrutoCr_rivermate_final = firstPage.getWidth() - totalBrutoCrRivermateWidth - 49
+      const xTotalAPagarCr_rivermate_final = firstPage.getWidth() - totalAPagarCrRivermateWidth - 49
+      const xTotalBrutoCr_rivermate_final_2 = firstPage.getWidth() - totalBrutoCrRivermateWidth - 49
+      const xTotalAPagarCr_2 = firstPage.getWidth() - totalAPagarCrWidth - 270
+      const xTotalAPagarCr_rivermate_final_2 = firstPage.getWidth() - totalAPagarCrRivermateWidth - 270
+
+      // Meses (necesarios para Rivermate antes de su uso)
+      const mesesEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+      const mesesEs = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+      const mesActualEn = mesesEn[new Date().getMonth()]
+      const mesActualEs = mesesEs[new Date().getMonth()]
+
+      // Posiciones específicas para Proforma Costa Rica Rivermate
+      const xCantidadCr_rivermate = firstPage.getWidth() - cantidadWidth - 282
+      const xVrBrutoCr_rivermate = firstPage.getWidth() - feeUsdCrWidth - 126
+      const xVrUnitarioCr_rivermate = firstPage.getWidth() - feeUsdCrWidth - 204
+      const xVrTotalCr_rivermate = firstPage.getWidth() - feeUsdCrWidth - 50
+      const xNombreClienteCr_rivermate = 110
+      const yNombreClienteCr_rivermate = firstPage.getHeight() - 264
+      const yCantidadCr_rivermate = firstPage.getHeight() - 266
+      const yVrBrutoCr_rivermate = firstPage.getHeight() - 266
+      const yVrUnitarioCr_rivermate = firstPage.getHeight() - 266
+      const yVrTotalCr_rivermate = firstPage.getHeight() - 266
+      const nombreClienteRivermate = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
 
       const xTasaCambio = firstPage.getWidth() - exchangeRateWidth - 60
       const y_3 = firstPage.getHeight() - 190
@@ -4044,11 +4266,6 @@ function App() {
       const xNombreCliente2_4_descuentos = 154
       const yNombreCliente2_4_descuentos = firstPage.getHeight() - 251
 
-      // Arrays de meses en inglés y español
-      const mesesEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-      const mesesEs = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-      const mesActualEn = mesesEn[new Date().getMonth()]
-      const mesActualEs = mesesEs[new Date().getMonth()]
       // Instancias 1 y 3 usan inglés, instancias 2 y 4 usan español
       const nombreClienteConMes1 = nombreCliente.includes('HEMMERSBACH')
         ? `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEn}`
@@ -4065,6 +4282,13 @@ function App() {
       const nombreHemmersbach2Linea2 = mesActualEs
       const nombreHemmersbach3 = `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEn}`
       const nombreHemmersbach4 = `${clienteData.nombreClienteFinal.toUpperCase()} - ${centroCosto} ${mesActualEs}`
+
+      // Variables independientes para Costa Rica
+      const nombreClienteConMesCr1 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+      const nombreClienteConMesCr2 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
+      const nombreClienteConMesCr3 = `${clienteData.nombreClienteFinal}, ${mesActualEn}`
+      const nombreClienteConMesCr4 = `${clienteData.nombreClienteFinal}, ${mesActualEs}`
+
       const xNombreCliente3_descuentos = 65
       const yNombreCliente3_descuentos = firstPage.getHeight() - 633
       const xMoneda_descuentos = 74
@@ -4098,7 +4322,7 @@ function App() {
       const yVrTotalDescuento = firstPage.getHeight() - 267
 
       firstPage.drawText('1.00', {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xCantidadHemmersbach : (usarDescuentos ? xCantidad_descuentos : xCantidad)),
+        x: activeProcess === 'costa-rica' ? xCantidadCr : (usarOncehub ? 0 : (usarHemmersbach ? xCantidadHemmersbach : (usarDescuentos ? xCantidad_descuentos : xCantidad))),
         y: usarOncehub ? 0 : (usarHemmersbach ? yCantidadHemmersbach : (usarDescuentos ? yCantidad_descuentos : y)),
         size: textSize,
         font,
@@ -4106,7 +4330,7 @@ function App() {
       })
 
       firstPage.drawText(formattedValue, {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xVrUnitarioHemmersbach : (usarDescuentos ? xVrUnitario_descuentos : xVrUnitario)),
+        x: activeProcess === 'costa-rica' ? xVrUnitarioCr : (usarOncehub ? 0 : (usarHemmersbach ? xVrUnitarioHemmersbach : (usarDescuentos ? xVrUnitario_descuentos : xVrUnitario))),
         y: usarOncehub ? 0 : (usarHemmersbach ? yVrUnitarioHemmersbach : (usarDescuentos ? yVrUnitario_descuentos : y)),
         size: textSize,
         font,
@@ -4114,7 +4338,7 @@ function App() {
       })
 
       firstPage.drawText(formattedValue, {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xVrBrutoHemmersbach : (usarDescuentos ? xVrBruto_descuentos : xVrBruto)),
+        x: activeProcess === 'costa-rica' ? xVrBrutoCr : (usarOncehub ? 0 : (usarHemmersbach ? xVrBrutoHemmersbach : (usarDescuentos ? xVrBruto_descuentos : xVrBruto))),
         y: usarOncehub ? 0 : (usarHemmersbach ? yVrBrutoHemmersbach : (usarDescuentos ? yVrBruto_descuentos : y)),
         size: textSize,
         font,
@@ -4122,7 +4346,7 @@ function App() {
       })
 
       firstPage.drawText(formattedValue, {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xVrTotalHemmersbach : (usarDescuentos ? xVrTotal_descuentos : xVrTotal)),
+        x: activeProcess === 'costa-rica' ? xVrTotalCr : (usarOncehub ? 0 : (usarHemmersbach ? xVrTotalHemmersbach : (usarDescuentos ? xVrTotal_descuentos : xVrTotal))),
         y: usarOncehub ? 0 : (usarHemmersbach ? yVrTotalHemmersbach : (usarDescuentos ? yVrTotal_descuentos : y)),
         size: textSize,
         font,
@@ -4130,23 +4354,23 @@ function App() {
       })
 
       firstPage.drawText(formattedFeeUsd, {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xVrTotalHemmersbach_2 : (usarDescuentos ? xVrTotal_2_descuentos : xVrTotal_2)),
+        x: activeProcess === 'costa-rica' ? xVrTotalCr_2 : (usarOncehub ? 0 : (usarHemmersbach ? xVrTotalHemmersbach_2 : (usarDescuentos ? xVrTotal_2_descuentos : xVrTotal_2))),
         y: usarOncehub ? 0 : (usarHemmersbach ? yVrTotalHemmersbach_2 : (usarDescuentos ? yVrTotal_2_descuentos : y_2)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
-      firstPage.drawText(formattedFeeUsdDivided, {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xVrUnitarioHemmersbach_2 : (usarDescuentos ? xVrUnitario_2_descuentos : xVrUnitario_2)),
+      firstPage.drawText(activeProcess === 'costa-rica' ? formattedFeeUsdCr : formattedFeeUsdDivided, {
+        x: activeProcess === 'costa-rica' ? xVrUnitarioCr_2 : (usarOncehub ? 0 : (usarHemmersbach ? xVrUnitarioHemmersbach_2 : (usarDescuentos ? xVrUnitario_2_descuentos : xVrUnitario_2))),
         y: usarOncehub ? 0 : (usarHemmersbach ? yVrUnitarioHemmersbach_2 : (usarDescuentos ? yVrUnitario_2_descuentos : y_2)),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
-      firstPage.drawText(formattedFeeUsdDivided, {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xVrBrutoHemmersbach_2 : (usarDescuentos ? xVrBruto_2_descuentos : xVrBruto_2)),
+      firstPage.drawText(activeProcess === 'costa-rica' ? formattedFeeUsdCr : formattedFeeUsdDivided, {
+        x: activeProcess === 'costa-rica' ? xVrBrutoCr_2 : (usarOncehub ? 0 : (usarHemmersbach ? xVrBrutoHemmersbach_2 : (usarDescuentos ? xVrBruto_2_descuentos : xVrBruto_2))),
         y: usarHemmersbach ? yVrBrutoHemmersbach_2 : (usarDescuentos ? yVrBruto_2_descuentos : y_2),
         size: textSize,
         font,
@@ -4154,15 +4378,64 @@ function App() {
       })
 
       firstPage.drawText('1.00', {
-        x: usarOncehub ? 0 : (usarHemmersbach ? xCantidadHemmersbach_2 : (usarDescuentos ? xCantidad_2_descuentos : xCantidad_2)),
+        x: activeProcess === 'costa-rica' ? xCantidadCr_2 : (usarOncehub ? 0 : (usarHemmersbach ? xCantidadHemmersbach_2 : (usarDescuentos ? xCantidad_2_descuentos : xCantidad_2))),
         y: usarHemmersbach ? yCantidadHemmersbach_2 : (usarDescuentos ? yCantidad_2_descuentos : y_2),
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
-      // Solo mostrar PRIMERA tasa de cambio si NO es Proforma Moneda COP y NO es ONCEHUB
-      if (pdfPath !== '/Proforma Moneda COP.pdf' && !usarOncehub) {
+      // Campos específicos para Proforma Costa Rica Rivermate
+      if (pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf') {
+        const clienteFontSizeRivermate = 6
+        // Cantidad extra
+        firstPage.drawText('1.00', {
+          x: xCantidadCr_rivermate,
+          y: yCantidadCr_rivermate,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        // Vr. Unitario
+        firstPage.drawText(formattedBankingTax, {
+          x: xVrUnitarioCr_rivermate,
+          y: yVrUnitarioCr_rivermate,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        // Vr. Bruto
+        firstPage.drawText(formattedBankingTax, {
+          x: xVrBrutoCr_rivermate,
+          y: yVrBrutoCr_rivermate,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        // Vr. Total
+        firstPage.drawText(formattedBankingTax, {
+          x: xVrTotalCr_rivermate,
+          y: yVrTotalCr_rivermate,
+          size: textSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+
+        // Nombre cliente con mes
+        firstPage.drawText(nombreClienteRivermate, {
+          x: xNombreClienteCr_rivermate,
+          y: yNombreClienteCr_rivermate,
+          size: clienteFontSizeRivermate,
+          font,
+          color: rgb(0, 0, 0),
+        })
+      }
+
+      // Solo mostrar PRIMERA tasa de cambio si NO es Proforma Moneda COP, NO es ONCEHUB y NO es Rivermate
+      if (pdfPath !== '/Proforma Moneda COP.pdf' && !usarOncehub && pdfPath !== '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf') {
         firstPage.drawText(formattedExchangeRate, {
           x: usarDescuentos ? xTasaCambio_descuentos : xTasaCambio,
           y: usarDescuentos ? yTasaCambio_descuentos : y_3,
@@ -4172,8 +4445,8 @@ function App() {
         })
       }
 
-      // Segunda tasa de cambio - siempre se muestra (excepto Moneda COP)
-      if (pdfPath !== '/Proforma Moneda COP.pdf') {
+      // Segunda tasa de cambio - siempre se muestra (excepto Moneda COP y Costa Rica)
+      if (pdfPath !== '/Proforma Moneda COP.pdf' && activeProcess !== 'costa-rica') {
         firstPage.drawText(formattedExchangeRate, {
           x: usarDescuentos ? xTasaCambio_2_descuentos : xTasaCambio_2,
           y: usarDescuentos ? yTasaCambio_2_descuentos : yTasaCambio_2,
@@ -4354,7 +4627,13 @@ function App() {
           
           const xNombreCliente2_4 = 154
           const yNombreCliente2_4 = firstPage.getHeight() - 265
-          
+
+          // Posiciones independientes para Costa Rica
+          const xNombreCliente2_1_Cr = 135
+          const yNombreCliente2_1_Cr = firstPage.getHeight() - 229
+          const xNombreCliente2_3_Cr = 120
+          const yNombreCliente2_3_Cr = firstPage.getHeight() - 246.2
+
           const xNombreCliente3 = 65
           const yNombreCliente3 = firstPage.getHeight() - 613
           
@@ -4367,9 +4646,9 @@ function App() {
           // Nombre cliente_2 - Instancias originales (NO para ONCEHUB)
           if (!usarOncehub) {
             // Instancia 1 (inglés)
-            firstPage.drawText(nombreClienteConMes1, {
-              x: usarDescuentos ? xNombreCliente2_1_descuentos : xNombreCliente2_1,
-              y: usarDescuentos ? yNombreCliente2_1_descuentos : yNombreCliente2_1,
+            firstPage.drawText(activeProcess === 'costa-rica' ? nombreClienteConMesCr1 : nombreClienteConMes1, {
+              x: activeProcess === 'costa-rica' ? xNombreCliente2_1_Cr : (usarDescuentos ? xNombreCliente2_1_descuentos : xNombreCliente2_1),
+              y: activeProcess === 'costa-rica' ? yNombreCliente2_1_Cr : (usarDescuentos ? yNombreCliente2_1_descuentos : yNombreCliente2_1),
               size: clienteFontSize,
               font,
               color: rgb(0, 0, 0),
@@ -4385,9 +4664,9 @@ function App() {
             // })
 
             // Instancia 3 (inglés)
-            firstPage.drawText(nombreClienteConMes3, {
-              x: usarDescuentos ? xNombreCliente2_3_descuentos : xNombreCliente2_3,
-              y: usarDescuentos ? yNombreCliente2_3_descuentos : yNombreCliente2_3,
+            firstPage.drawText(activeProcess === 'costa-rica' ? nombreClienteConMesCr3 : nombreClienteConMes3, {
+              x: activeProcess === 'costa-rica' ? xNombreCliente2_3_Cr : (usarDescuentos ? xNombreCliente2_3_descuentos : xNombreCliente2_3),
+              y: activeProcess === 'costa-rica' ? yNombreCliente2_3_Cr : (usarDescuentos ? yNombreCliente2_3_descuentos : yNombreCliente2_3),
               size: clienteFontSize,
               font,
               color: rgb(0, 0, 0),
@@ -4468,35 +4747,36 @@ function App() {
             })
           }
 
-          // Campos de cliente
+          // Campos de cliente (no mostrar en Costa Rica)
+          if (activeProcess !== 'costa-rica') {
+            // Nombre cliente_3 (solo valor de columna J sin mes)
+            firstPage.drawText(clienteData.nombreClienteFinal || '', {
+              x: usarDescuentos ? xNombreCliente3_descuentos : xNombreCliente3,
+              y: usarDescuentos ? yNombreCliente3_descuentos : yNombreCliente3,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
 
-          // Nombre cliente_3 (solo valor de columna J sin mes)
-          firstPage.drawText(clienteData.nombreClienteFinal || '', {
-            x: usarDescuentos ? xNombreCliente3_descuentos : xNombreCliente3,
-            y: usarDescuentos ? yNombreCliente3_descuentos : yNombreCliente3,
-            size: clienteFontSize,
-            font,
-            color: rgb(0, 0, 0),
-          })
+            // Moneda facturación
+            const monedaTexto = clienteData.monedaFacturacion === 'USD' ? 'US dollar' : (clienteData.monedaFacturacion || '')
+            firstPage.drawText(monedaTexto, {
+              x: usarDescuentos ? xMoneda_descuentos : xMoneda,
+              y: usarDescuentos ? yMoneda_descuentos : yMoneda,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
 
-          // Moneda facturación
-          const monedaTexto = clienteData.monedaFacturacion === 'USD' ? 'US dollar' : (clienteData.monedaFacturacion || '')
-          firstPage.drawText(monedaTexto, {
-            x: usarDescuentos ? xMoneda_descuentos : xMoneda,
-            y: usarDescuentos ? yMoneda_descuentos : yMoneda,
-            size: clienteFontSize,
-            font,
-            color: rgb(0, 0, 0),
-          })
-
-          // País (valor fijo)
-          firstPage.drawText('Colombia', {
-            x: usarDescuentos ? xPais_descuentos : xPais,
-            y: usarDescuentos ? yPais_descuentos : yPais,
-            size: clienteFontSize,
-            font,
-            color: rgb(0, 0, 0),
-          })
+            // País (valor fijo)
+            firstPage.drawText('Colombia', {
+              x: usarDescuentos ? xPais_descuentos : xPais,
+              y: usarDescuentos ? yPais_descuentos : yPais,
+              size: clienteFontSize,
+              font,
+              color: rgb(0, 0, 0),
+            })
+          }
 
           // Identificación
           firstPage.drawText(clienteData.identificacion || '', {
@@ -4558,39 +4838,39 @@ function App() {
           })
         }
 
-      firstPage.drawText(formattedTotalBruto, {
-        x: usarDescuentos ? xTotalBruto_descuentos : xTotalBruto,
+      firstPage.drawText(pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf' ? formattedTotalBrutoCr_rivermate : (activeProcess === 'costa-rica' ? formattedTotalBrutoCr : formattedTotalBruto), {
+        x: pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf' ? xTotalBrutoCr_rivermate_final : (activeProcess === 'costa-rica' ? xTotalBrutoCr : (usarDescuentos ? xTotalBruto_descuentos : xTotalBruto)),
         y: usarDescuentos ? yTotalBruto_descuentos : yTotalBruto,
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
-      firstPage.drawText(formattedTotalAPagar, {
-        x: usarDescuentos ? xTotalAPagar_descuentos : xTotalAPagar,
+      firstPage.drawText(pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf' ? formattedTotalAPagarCr_rivermate : (activeProcess === 'costa-rica' ? formattedTotalAPagarCr : formattedTotalAPagar), {
+        x: pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf' ? xTotalAPagarCr_rivermate_final : (activeProcess === 'costa-rica' ? xTotalAPagarCr : (usarDescuentos ? xTotalAPagar_descuentos : xTotalAPagar)),
         y: usarDescuentos ? yTotalAPagar_descuentos : yTotalAPagar,
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
-      firstPage.drawText(formattedTotalAPagar, {
-        x: usarDescuentos ? xTotalAPagar_2_descuentos : xTotalAPagar_2,
+      firstPage.drawText(pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf' ? formattedTotalAPagarCr_rivermate : (activeProcess === 'costa-rica' ? formattedTotalAPagarCr : formattedTotalAPagar), {
+        x: pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf' ? xTotalAPagarCr_rivermate_final_2 : (activeProcess === 'costa-rica' ? xTotalAPagarCr_2 : (usarDescuentos ? xTotalAPagar_2_descuentos : xTotalAPagar_2)),
         y: usarDescuentos ? yTotalAPagar_2_descuentos : yTotalAPagar_2,
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
-      firstPage.drawText(formattedIvaServicios, {
-        x: usarDescuentos ? xIvaServicios_descuentos : xIvaServicios,
+      firstPage.drawText(activeProcess === 'costa-rica' ? formattedIvaServiciosCr : formattedIvaServicios, {
+        x: activeProcess === 'costa-rica' ? xIvaServiciosCr : (usarDescuentos ? xIvaServicios_descuentos : xIvaServicios),
         y: usarDescuentos ? yIvaServicios_descuentos : yIvaServicios,
         size: textSize,
         font,
         color: rgb(0, 0, 0),
       })
 
-      firstPage.drawText(valorEnLetras, {
+      firstPage.drawText(pdfPath === '/Prorrogas Otros Paises/Proforma Costa Rica Rivermate.pdf' ? valorEnLetrasCr_rivermate : (activeProcess === 'costa-rica' ? valorEnLetrasCr : valorEnLetras), {
         x: usarDescuentos ? xValorEnLetras_descuentos : xValorEnLetras,
         y: usarDescuentos ? yValorEnLetras_descuentos : yValorEnLetras,
         size: textSize,
@@ -4696,11 +4976,12 @@ function App() {
 
       // Actualizar consecutivo después de generar la proforma
       const nuevoConsecutivo = parseInt(consecutivo) + 1
+      const procesoActual = activeProcess === 'costa-rica' ? 'costa-rica' : 'general'
       try {
         await sql`
           UPDATE proformas_config 
           SET consecutivo = ${nuevoConsecutivo}, updated_at = CURRENT_TIMESTAMP
-          WHERE id = (SELECT id FROM proformas_config ORDER BY id DESC LIMIT 1)
+          WHERE proceso = ${procesoActual} AND id = (SELECT id FROM proformas_config WHERE proceso = ${procesoActual} ORDER BY id DESC LIMIT 1)
         `
         setConsecutivo(String(nuevoConsecutivo).padStart(3, '0'))
       } catch (err) {
@@ -5614,6 +5895,26 @@ function App() {
                     onChange={(e) => setFechaVencimiento(e.target.value)}
                   />
                 </div>
+
+                {activeProcess === 'costa-rica' && requiereTrm && (
+                  <div className="form-group">
+                    <label className="label">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="1" x2="12" y2="23"/>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                      </svg>
+                      Ingresa la TRM
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Ej: 4500"
+                      className="select-input"
+                      value={trmManual}
+                      onChange={(e) => setTrmManual(e.target.value)}
+                    />
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="label">
