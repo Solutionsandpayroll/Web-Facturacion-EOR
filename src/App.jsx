@@ -569,8 +569,8 @@ function App() {
               es_liquidacion = ${cfg.es_liquidacion},
               deposito = ${cfg.deposito},
               deposito_modalidad = ${cfg.deposito_modalidad},
-              deposito_porcentaje = ${cfg.deposito_porcentaje},
-              deposito_valor_usd = ${cfg.deposito_valor_usd}
+              deposito_porcentaje = ${cfg.deposito_porcentaje ? Number(cfg.deposito_porcentaje) : null},
+              deposito_valor_usd = ${cfg.deposito_valor_usd ? Number(cfg.deposito_valor_usd) : null}
           WHERE code = ${code}
         `
       } else {
@@ -583,8 +583,8 @@ function App() {
               es_liquidacion = ${cfg.es_liquidacion},
               deposito = ${cfg.deposito},
               deposito_modalidad = ${cfg.deposito_modalidad},
-              deposito_porcentaje = ${cfg.deposito_porcentaje},
-              deposito_valor_usd = ${cfg.deposito_valor_usd}
+              deposito_porcentaje = ${cfg.deposito_porcentaje ? Number(cfg.deposito_porcentaje) : null},
+              deposito_valor_usd = ${cfg.deposito_valor_usd ? Number(cfg.deposito_valor_usd) : null}
           WHERE code = ${code}
         `
       }
@@ -664,12 +664,12 @@ function App() {
       if (targetTable === 'clientes_config_costa_rica') {
         await sql`
           INSERT INTO clientes_config_costa_rica (code, name, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd, activo)
-          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, ${addForm.deposito}, ${addForm.deposito_modalidad}, ${addForm.deposito_porcentaje || null}, ${addForm.deposito_valor_usd || null}, true)
+          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, ${addForm.deposito}, ${addForm.deposito_modalidad}, ${addForm.deposito_porcentaje ? Number(addForm.deposito_porcentaje) : null}, ${addForm.deposito_valor_usd ? Number(addForm.deposito_valor_usd) : null}, true)
         `
       } else {
         await sql`
           INSERT INTO clientes_config (code, name, fee, iva, banking, sin_usd, es_liquidacion, deposito, deposito_modalidad, deposito_porcentaje, deposito_valor_usd, activo)
-          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, ${addForm.deposito}, ${addForm.deposito_modalidad}, ${addForm.deposito_porcentaje || null}, ${addForm.deposito_valor_usd || null}, true)
+          VALUES (${code}, ${code}, ${addForm.fee || '10%'}, ${addForm.iva}, ${addForm.banking}, ${addForm.sin_usd}, ${addForm.es_liquidacion}, ${addForm.deposito}, ${addForm.deposito_modalidad}, ${addForm.deposito_porcentaje ? Number(addForm.deposito_porcentaje) : null}, ${addForm.deposito_valor_usd ? Number(addForm.deposito_valor_usd) : null}, true)
         `
       }
       await loadConfig()
