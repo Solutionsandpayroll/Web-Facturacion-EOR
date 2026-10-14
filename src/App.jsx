@@ -210,6 +210,9 @@ function App() {
   const [requiereTrm, setRequiereTrm] = useState(false)
   const [dragFacturacion, setDragFacturacion] = useState(false)
   const [generandoProforma, setGenerandoProforma] = useState(false)
+  const [historialNotificaciones, setHistorialNotificaciones] = useState([])
+  const [cargandoHistorial, setCargandoHistorial] = useState(false)
+  const [filtroProceso, setFiltroProceso] = useState('todos')
   const [errorProforma, setErrorProforma] = useState(null)
   const [exitoProforma, setExitoProforma] = useState(false)
   const [enviandoNotificacion, setEnviandoNotificacion] = useState(false)
@@ -5016,14 +5019,56 @@ function App() {
         throw new Error(errorData.error || 'Error al enviar el correo')
       }
 
+      // Guardar en historial
+      try {
+        const clienteData = clientesEOR[parseInt(clienteSeleccionadoEOR)]
+        const nombreCliente = clienteData?.nombreTercero || 'Desconocido'
+        const procesoActual = activeProcess === 'costa-rica' ? 'costa-rica' : 'general'
+        await sql`
+          INSERT INTO notificaciones_historial (cliente, nombre_archivo, proceso, destinatarios, estado)
+          VALUES (${nombreCliente}, ${archivoFacturacion.name}, ${procesoActual}, 'ypena@solutionsandpayroll.com, vguzman@solutionsandpayroll.com', 'exitoso')
+        `
+      } catch (err) {
+        console.error('Error al guardar historial:', err)
+      }
+
       setExitoNotificacion(true)
       setTimeout(() => setExitoNotificacion(false), 5000)
     } catch (err) {
+      // Guardar intento fallido en historial
+      try {
+        const clienteData = clientesEOR[parseInt(clienteSeleccionadoEOR)]
+        const nombreCliente = clienteData?.nombreTercero || 'Desconocido'
+        const procesoActual = activeProcess === 'costa-rica' ? 'costa-rica' : 'general'
+        const nombreArchivo = archivoFacturacion ? archivoFacturacion.name : 'Desconocido'
+        await sql`
+          INSERT INTO notificaciones_historial (cliente, nombre_archivo, proceso, destinatarios, estado)
+          VALUES (${nombreCliente}, ${nombreArchivo}, ${procesoActual}, 'ypena@solutionsandpayroll.com, vguzman@solutionsandpayroll.com', 'fallido')
+        `
+      } catch (e) {
+        console.error('Error al guardar historial:', e)
+      }
       setErrorNotificacion(err.message)
     } finally {
       setEnviandoNotificacion(false)
     }
   }
+
+  const cargarHistorial = useCallback(async () => {
+    setCargandoHistorial(true)
+    try {
+      const rows = filtroProceso === 'todos'
+        ? await sql`SELECT * FROM notificaciones_historial ORDER BY fecha DESC LIMIT 100`
+        : await sql`SELECT * FROM notificaciones_historial WHERE proceso = ${filtroProceso} ORDER BY fecha DESC LIMIT 100`
+      setHistorialNotificaciones(rows)
+    } catch (err) {
+      console.error('Error al cargar historial:', err)
+    } finally {
+      setCargandoHistorial(false)
+    }
+  }, [filtroProceso])
+
+  useEffect(() => { cargarHistorial() }, [cargarHistorial])
 
   return (
     <div className="app">
@@ -5173,6 +5218,16 @@ function App() {
                 <path d="M9 17h3"/>
               </svg>
               Generar Proformas
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'historial' ? 'active' : ''}`}
+              onClick={() => setActiveTab('historial')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Historial Notificaciones
             </button>
             <button
               className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
@@ -6745,6 +6800,76 @@ function App() {
             </div>
           )}
 
+        </div>
+      </section>
+      )}
+
+      {activeTab === 'historial' && (
+      <section className="admin-section historial-tab">
+        <div className="container">
+          <div className="card">
+            <div className="card-header">
+              <h2>Historial de Notificaciones</h2>
+              <p className="description">
+                Registro de todas las notificaciones enviadas.
+              </p>
+            </div>
+
+            <div className="card-body">
+              <div className="form-group">
+                <label className="label">Filtrar por proceso</label>
+                <select
+                  className="select-input"
+                  value={filtroProceso}
+                  onChange={(e) => setFiltroProceso(e.target.value)}
+                >
+                  <option value="todos">Todos</option>
+                  <option value="general">General - German</option>
+                  <option value="costa-rica">Costa Rica - Tatiana</option>
+                </select>
+              </div>
+
+              {cargandoHistorial ? (
+                <p>Cargando historial...</p>
+              ) : historialNotificaciones.length === 0 ? (
+                <p>No hay notificaciones registradas.</p>
+              ) : (
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Proceso</th>
+                        <th>Cliente</th>
+                        <th>Archivo</th>
+                        <th>Destinatarios</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historialNotificaciones.map(notif => (
+                        <tr key={notif.id}>
+                          <td>{new Date(notif.fecha).toLocaleString('es-CO')}</td>
+                          <td>
+                            <span className={`badge-fee ${notif.proceso === 'costa-rica' ? 'badge-cr' : ''}`}>
+                              {notif.proceso === 'costa-rica' ? 'Costa Rica' : 'General'}
+                            </span>
+                          </td>
+                          <td>{notif.cliente}</td>
+                          <td>{notif.nombre_archivo}</td>
+                          <td style={{fontSize:'0.8rem'}}>{notif.destinatarios}</td>
+                          <td>
+                            <span className={notif.estado === 'exitoso' ? 'dot dot-on' : 'dot dot-off'}></span>
+                            {notif.estado}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
       )}
